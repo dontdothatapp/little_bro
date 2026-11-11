@@ -24,17 +24,29 @@ public struct Card: Equatable, Sendable {
     }
 }
 
+public enum HackerStyle: String, CaseIterable, Sendable {
+    /// Pixel shades + a terminal that "hacks the mainframe".
+    case shades
+    /// Code rain inside the body, focused green eyes.
+    case rain
+}
+
 /// Something Little Bro can perform.
 public enum Act: Equatable, Sendable {
     /// A Claude session card. `intro` is the full first-time choreography; reminders are shorter.
     case card(Card, intro: Bool)
     case idle(IdleVariant)
     case peek
+    /// Headphones on, bobbing to the beat.
+    case vibe
+    case hacker(HackerStyle)
+    /// One real point of paddle ball; the running score is shown.
+    case game(left: Int, right: Int)
 
     public var priority: Int {
         switch self {
         case .card(let c, _): return c.kind == .needsInput ? 3 : 2
-        case .peek: return 1
+        case .peek, .vibe, .hacker, .game: return 1
         case .idle: return 0
         }
     }
@@ -73,6 +85,14 @@ public final class Director {
     public private(set) var isRetracting = false
     /// Called once Little Bro has fully tucked away, with the act that just ended.
     public var onHidden: ((Act?) -> Void)?
+    /// A paddle-ball point was decided: -1 the left player won, +1 the right one.
+    public var onRallyPoint: ((Int) -> Void)?
+
+    /// Keeps the beat while vibing; feed it measurements with `syncBeat`.
+    public private(set) var beatClock = BeatClock()
+    var rhythmAmount = Spring(0, SpringParams(response: 0.5, damping: 1))
+    var eyesOpenInGroove = false
+    var overlays: [Overlay] = []
 
     var timeline = Timeline()
     var gaze: Gaze = .fixed(0, 0.15)
@@ -110,10 +130,17 @@ public final class Director {
         act = newAct
         startled = false
         timeline = Timeline()
+        for o in overlays { o.presence.target = 0 }
+        rhythmAmount.target = 0
+        character.paddleMix.target = 0
+        character.setEyeColor(.white)
         switch newAct {
         case .card(let card, let intro): buildCard(card, intro: intro)
         case .idle(let variant): buildIdle(variant)
         case .peek: buildPeek()
+        case .vibe: buildVibe()
+        case .hacker(let style): buildHacker(style)
+        case .game(let l, let r): buildGame(left: l, right: r)
         }
         timeline.start()
         timeline.advance(0, self)
@@ -144,7 +171,11 @@ public final class Director {
         let textOut = hadText ? 0.12 : 0
         timeline = Timeline()
         // Keeps whatever expression it has: it closes its eyes from there.
+        for o in overlays { o.presence.target = 0 }
+        rhythmAmount.target = 0
+        character.paddleMix.target = 0
         timeline.at(0) { d in
+            d.character.setEyeColor(.white)
             d.character.textFading = true
             d.character.recapOn = false
             d.character.hovering = false
@@ -225,6 +256,12 @@ public final class Director {
 
         updateGaze(input)
         if life && !isRetracting { updateLife() }
+        updateRhythm(dt)
+        for o in overlays {
+            o.presence.step(dt)
+            o.update(dt, self)
+        }
+        overlays.removeAll { $0.isGone }
 
         character.step(dt)
 
@@ -233,13 +270,60 @@ public final class Director {
             if character.blobH.value < 0.35 && character.baseSize.height <= 0 {
                 finishHidden()
             }
-        } else if act == nil && character.isFullyHidden {
-            // Nothing to do.
         }
-        return character.scene()
+        var scene = character.scene()
+        for o in overlays { o.decorate(&scene, self) }
+        return scene
+    }
+
+    /// Feed a tempo measurement (BPM and the current phase 0…1 of the music).
+    public func syncBeat(bpm: Double, phase: Double) {
+        beatClock.sync(bpm: bpm, phase: phase)
+    }
+
+    private func updateRhythm(_ dt: Double) {
+        rhythmAmount.step(dt)
+        let amount = clamp(rhythmAmount.value, 0, 1)
+        guard amount > 0.0005 || act == .vibe else {
+            character.rhythm = Character.Rhythm()
+            return
+        }
+        beatClock.advance(dt)
+        let pos = beatClock.position
+        let phase = pos - floor(pos)
+        // A beat: quick (but continuous) attack, then a falling decay.
+        let attack = 0.09
+        let hit = phase < attack ? sin(phase / attack * .pi / 2) : pow(1 - (phase - attack) / (1 - attack), 2)
+        var r = Character.Rhythm()
+        r.bob = 3.2 * hit * amount
+        r.squash = 2.0 * hit * amount
+        r.lean = 3.6 * sin(.pi * pos) * amount
+        r.tilt = 0.11 * sin(.pi * pos) * amount
+        character.rhythm = r
+        // Eyes closed in bliss; every eight beats they open for two to look at you.
+        if act == .vibe {
+            let open = pos.truncatingRemainder(dividingBy: 8) >= 6
+            if open != eyesOpenInGroove {
+                eyesOpenInGroove = open
+                setBase(open ? .content : .blissful)
+                if open { character.blink() }
+            }
+        }
+    }
+
+    /// Called by the court when a point is decided.
+    func rallyEnded(winner: Int) {
+        onRallyPoint?(winner)
+        // Hold the court so the new score is seen, then turn back into happy eyes.
+        timeline.after(1.25) { d in d.character.paddleMix.target = 0 }
+        timeline.after(1.5) { d in d.setBase(.happy) }
+        timeline.after(1.9) { d in d.hop(110) }
+        timeline.after(3.0) { d in d.retract() }
     }
 
     private func finishHidden() {
+        overlays.removeAll()
+        rhythmAmount.snap(to: 0)
         isRetracting = false
         let ended = endedAct
         endedAct = nil

@@ -5,3 +5,4 @@ build/
 DerivedData/
 previews-out/
 .DS_Store
+.superpowers/

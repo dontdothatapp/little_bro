@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let parts = url.pathComponents.filter { $0 != "/" }
             switch url.host {
             case "play":
-                if let key = parts.first, let act = Previews.act(key) { presenter.present(act) }
+                if let key = parts.first { presenter.preview(key) }
             case "debug":
                 if parts.first == "snapshot" { DebugSnapshot.write(presenter) }
                 if parts.first == "present" { presenter.forcePresentUntil = Date().addingTimeInterval(120) }

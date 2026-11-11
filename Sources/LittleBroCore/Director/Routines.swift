@@ -254,7 +254,7 @@ extension Director {
     func buildPeek() {
         let t = timeline
         t.at(0) { d in
-            d.enter(Metrics.peek, anchor: 1, faceScale: 0.82)
+            d.enter(Metrics.peek, anchor: 1, faceScale: 0.6)
             d.setBase(.peek)
             d.look(0, 1)
             d.glow(.white, 0.6)

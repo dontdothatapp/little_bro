@@ -17,6 +17,21 @@ liquid-feeling shape that grows out of the top edge of the screen.
 3. **YouTube peeks.** While a YouTube video plays, every few minutes a smaller pair of
    eyes peeks down at the video for a few seconds.
 
+4. **App moments.** Opening (switching to) certain apps or sites plays a short moment,
+   at most once per 3 hours per category by default ("every time" for testing):
+   - Spotify (app or web) → **vibe**: headphones, blissful closed eyes, bobbing and swaying
+     to the real tempo (Core Audio process tap on Spotify's audio → spectral-flux onsets →
+     autocorrelation tempo + bass-weighted beat phase → a phase-locked `BeatClock`). Waits up
+     to a minute for music to start. No permission → a standard 112 BPM groove.
+   - Terminals, editors, IDEs, dev tools → **Hackerman**, alternating between *shades*
+     (pixel shades + a terminal typing a random "hack" and a progress bar) and *rain*
+     (green code rain behind focused, green-tinted eyes).
+   - Game stores, launchers, games (bundle ids, `public.app-category.*games`, Steam's
+     `steamapps/common`) and store sites → **paddle ball**: the eyes become paddles and play
+     one real, randomly-decided point (`PaddleRally`); the all-time score persists and pops
+     when it changes.
+   Claude cards always take priority; a moment that can't show within 15 s is dropped.
+
 ## Decisions (made autonomously while the owner was away)
 
 | Area | Decision | Why |
@@ -36,6 +51,17 @@ liquid-feeling shape that grows out of the top edge of the screen.
 | Hook install | Opt-in: on first launch a "connect me to Claude Code" card appears; clicking it merges Little Bro's hooks into existing ones (never touching others) and backs the original up once to `settings.json.before-littlebro`. Removable from the menu. | Little Bro never edits Claude's global config without an explicit click. |
 | Launch at login | Off by default; a menu toggle. | It's a persistent system change, so it's the owner's call. |
 | Signing | Ad-hoc by default; `LITTLEBRO_SIGN_IDENTITY` to sign with a real identity. | Signing with a keychain identity needs a one-time keychain prompt. |
+
+## Decisions for app moments (made with the owner)
+
+| Area | Decision |
+|---|---|
+| Frequency | Per category, at most once every 3 hours (no daily cap); a menu setting switches to "every time". |
+| Spotify look | Black-and-white headphones, no floating notes. |
+| Hackerman | Both directions, taking turns. |
+| Gaming | Paddles playing a real point; score kept forever (resettable from the menu); previews don't count. |
+| Sizes | Cards and idle visits 40 pt tall, the YouTube peek 25 pt. |
+| Rendering | Acts add `Overlay`s (headphones, shades/terminal, code rain, court) that draw extra shapes and text into the scene on three planes (behind the eyes, in front, over the body), each fading with its own presence spring. |
 
 ## Non-goals (v0.1)
 

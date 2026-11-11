@@ -54,6 +54,8 @@ public struct BitmapRenderer {
             ctx.saveGState()
             ctx.addPath(blob)
             ctx.clip()
+            drawTexts(ctx, scene.texts.filter { $0.plane == .behindEyes })
+            drawShapes(ctx, scene.shapes.filter { $0.plane == .behindEyes })
             if scene.blushOpacity > 0.005 {
                 ctx.saveGState()
                 ctx.setShadow(offset: .zero, blur: 7 * scale, color: scene.blushColor.with(alpha: 0.9).cgColor)
@@ -83,35 +85,68 @@ public struct BitmapRenderer {
                     ctx.restoreGState()
                 }
             }
-
             if let pill = scene.badgePill, scene.badgePillOpacity > 0.005 {
                 ctx.setFillColor(RGBA(1, 1, 1, 0.14 * scene.badgePillOpacity).cgColor)
                 ctx.addPath(CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2,
                                    transform: nil))
                 ctx.fillPath()
             }
-            for t in scene.texts {
-                guard let out = TextRasterizer.shared.render(t.text, style: t.style, color: t.color,
-                                                             maxWidth: t.maxWidth, maxLines: t.maxLines,
-                                                             scale: scale) else { continue }
-                var image = out.image
-                var drawRect = CGRect(origin: t.origin, size: out.size)
-                if t.blur > 0.25, let blurred = blur(image, radius: t.blur * scale) {
-                    image = blurred.image
-                    drawRect = drawRect.insetBy(dx: -blurred.padPx / scale, dy: -blurred.padPx / scale)
-                }
-                ctx.saveGState()
-                ctx.setAlpha(t.opacity)
-                ctx.translateBy(x: drawRect.minX, y: drawRect.maxY)
-                ctx.scaleBy(x: 1, y: -1)
-                ctx.draw(image, in: CGRect(origin: .zero, size: drawRect.size))
-                ctx.restoreGState()
-            }
+            drawShapes(ctx, scene.shapes.filter { $0.plane == .aboveEyes })
+            drawTexts(ctx, scene.texts.filter { $0.plane == .aboveEyes })
             ctx.restoreGState()
+            drawShapes(ctx, scene.shapes.filter { $0.plane == .overlay })
+            drawTexts(ctx, scene.texts.filter { $0.plane == .overlay })
         }
 
         if let c = cursor { drawCursor(ctx, at: c) }
         return ctx.makeImage()
+    }
+
+    private func drawShapes(_ ctx: CGContext, _ shapes: [ShapeDraw]) {
+        for sh in shapes where sh.opacity > 0.001 {
+            ctx.saveGState()
+            if let g = sh.glow, sh.glowRadius > 0 {
+                ctx.setShadow(offset: .zero, blur: sh.glowRadius * scale, color: g.cgColor)
+            }
+            ctx.setAlpha(sh.opacity)
+            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+            ctx.setLineJoin(.round)
+            ctx.setLineCap(.round)
+            if let f = sh.fill {
+                ctx.addPath(sh.path)
+                ctx.setFillColor(f.cgColor)
+                ctx.fillPath()
+            }
+            if let st = sh.stroke, sh.lineWidth > 0 {
+                ctx.addPath(sh.path)
+                ctx.setStrokeColor(st.cgColor)
+                ctx.setLineWidth(sh.lineWidth)
+                ctx.strokePath()
+            }
+            ctx.endTransparencyLayer()
+            ctx.restoreGState()
+        }
+    }
+
+    private func drawTexts(_ ctx: CGContext, _ texts: [TextDraw]) {
+        for t in texts {
+            guard let out = TextRasterizer.shared.render(t.text, style: t.style, color: t.color,
+                                                         maxWidth: t.maxWidth, maxLines: t.maxLines,
+                                                         scale: scale) else { continue }
+            var image = out.image
+            var drawRect = CGRect(origin: t.origin, size: out.size)
+            if t.blur > 0.25, let blurred = blur(image, radius: t.blur * scale) {
+                image = blurred.image
+                drawRect = drawRect.insetBy(dx: -blurred.padPx / scale, dy: -blurred.padPx / scale)
+            }
+            ctx.saveGState()
+            ctx.setAlpha(t.opacity)
+            if let g = t.glow { ctx.setShadow(offset: .zero, blur: 5 * scale, color: g.cgColor) }
+            ctx.translateBy(x: drawRect.minX, y: drawRect.maxY)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.draw(image, in: CGRect(origin: .zero, size: drawRect.size))
+            ctx.restoreGState()
+        }
     }
 
     /// Blurs an image; `radius` and the returned padding are in pixels.

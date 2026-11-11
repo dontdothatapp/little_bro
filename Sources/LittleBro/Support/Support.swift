@@ -1,4 +1,5 @@
 import Foundation
+import LittleBroCore
 
 enum AppPaths {
     static let appSupport: URL = {
@@ -82,5 +83,44 @@ final class Settings {
     var setupCardDismissed: Bool {
         get { d.bool(forKey: "setupCardDismissed") }
         set { d.set(newValue, forKey: "setupCardDismissed") }
+    }
+
+    // MARK: App moments
+
+    var momentFrequency: MomentFrequency {
+        get { d.string(forKey: "momentFrequency").flatMap(MomentFrequency.init(rawValue:)) ?? .everyThreeHours }
+        set { d.set(newValue.rawValue, forKey: "momentFrequency") }
+    }
+
+    func momentEnabled(_ m: Moment) -> Bool {
+        d.object(forKey: "moment.\(m.rawValue)") as? Bool ?? true
+    }
+
+    func setMoment(_ m: Moment, enabled: Bool) {
+        d.set(enabled, forKey: "moment.\(m.rawValue)")
+    }
+
+    var momentGate: MomentGate {
+        get {
+            var g = d.data(forKey: "momentGate").flatMap { try? JSONDecoder().decode(MomentGate.self, from: $0) }
+                ?? MomentGate()
+            g.frequency = momentFrequency
+            return g
+        }
+        set { d.set(try? JSONEncoder().encode(newValue), forKey: "momentGate") }
+    }
+
+    /// The all-time paddle ball score: left player, right player.
+    var paddleScore: (left: Int, right: Int) {
+        get {
+            let a = d.array(forKey: "paddleScore") as? [Int] ?? [0, 0]
+            return (a.first ?? 0, a.count > 1 ? a[1] : 0)
+        }
+        set { d.set([newValue.left, newValue.right], forKey: "paddleScore") }
+    }
+
+    var lastHackerStyle: HackerStyle? {
+        get { d.string(forKey: "lastHackerStyle").flatMap(HackerStyle.init(rawValue:)) }
+        set { d.set(newValue?.rawValue, forKey: "lastHackerStyle") }
     }
 }

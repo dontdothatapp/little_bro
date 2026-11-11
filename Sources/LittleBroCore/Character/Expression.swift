@@ -82,6 +82,10 @@ public struct Expression: Equatable, Sendable {
     /// Pleading: inner corners raised, a touch bigger.
     public static let pleading = Expression(EyeShape(width: 1.04, height: 1.1, lidTop: 0.16, lidAngle: -0.4),
                                             spacing: 0.96)
+    /// Lost in the music: closed, smiling.
+    public static let blissful = Expression(EyeShape(width: 1.1, height: 0.6, happy: 0.92, roundness: 0.5))
+    /// Concentrating hard (Hackerman).
+    public static let focused = Expression(EyeShape(width: 1.08, height: 0.98, lidTop: 0.46, lidAngle: 0.16, roundness: 0.45))
     public static let wink = Expression(left: EyeShape(width: 1.12, height: 0.62, happy: 0.92, roundness: 0.5),
                                         right: EyeShape(width: 1.04, height: 1.06),
                                         tilt: 0.14)

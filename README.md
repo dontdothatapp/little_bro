@@ -16,10 +16,20 @@ What it does today:
   shyly. Move the cursor while it's out and it startles back into hiding.
 - **YouTube peeks.** While you watch a YouTube video, small eyes peek down at it for a
   few seconds every few minutes.
+- **App moments** (at most once every 3 hours each, or every time — see the menu):
+  - **Spotify** (app or open.spotify.com): headphones on, eyes closed, head-bobbing to the
+    song's real tempo. Little Bro listens to Spotify's audio *only* to find the beat — the
+    first time, macOS asks for permission; if you say no, it grooves at a standard tempo.
+  - **Terminals, editors and IDEs** (Terminal, iTerm2, Warp, Ghostty, Xcode, Cursor, VS Code,
+    Sublime Text, Zed, JetBrains…): Hackerman — either pixel shades and a terminal that
+    "hacks the mainframe", or green code rain with focused eyes. They take turns.
+  - **Games** (Steam, GOG, Epic, itch, Battle.net…, store sites like SteamDB, and games
+    themselves): the eyes become paddles and play one real point of paddle ball. The
+    all-time score is kept, so you can root for a side.
 
 ## Run it
 
-Requires macOS 14+ and Xcode (Swift 6).
+Requires macOS 14.2+ and Xcode (Swift 6).
 
 ```bash
 ./scripts/install.sh
@@ -35,15 +45,17 @@ the original file is backed up once as `settings.json.before-littlebro`). Nothin
 changed until you click. You can disconnect from the menu at any time. Sessions started
 before connecting may need a restart before their hooks fire.
 
-The first time a YouTube video plays, macOS asks whether Little Bro may control your
-browser — that's only used to read the front tab's address. If you say no, any video
-playing in a browser counts as "watching".
+The first time it needs to, macOS asks whether Little Bro may control your browser —
+that's only used to read the front tab's address (to notice YouTube, Spotify and game
+stores). If you say no, any video playing in a browser counts as "watching", and web
+pages don't trigger moments.
 
 ### Handy for testing
 
 ```bash
-open "littlebro://play/done"        # also: done-reminder, needs, needs-reminder, peek,
-                                    # idle-lookAround, idle-sleepy, idle-hello, idle-curious, idle-shy
+open "littlebro://play/done"        # also: done-reminder, needs, needs-reminder, peek, vibe,
+                                    # hacker-shades, hacker-rain, game, idle-lookAround,
+                                    # idle-sleepy, idle-hello, idle-curious, idle-shy
 open "littlebro://debug/snapshot"   # writes the current frame to ~/Library/Application Support/LittleBro
 ```
 

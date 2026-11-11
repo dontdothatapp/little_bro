@@ -72,9 +72,42 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         for v in IdleVariant.allCases {
             sub.addItem(previewItem("Idle visit: \(Self.name(v))", "idle-\(v.rawValue)"))
         }
+        sub.addItem(.separator())
+        for (title, key) in [("Spotify: vibing", "vibe"), ("Hackerman: shades", "hacker-shades"),
+                             ("Hackerman: code rain", "hacker-rain"), ("Gaming: paddle ball", "game")] {
+            sub.addItem(previewItem(title, key))
+        }
         preview.submenu = sub
         menu.addItem(preview)
         menu.addItem(.separator())
+
+        let moments = NSMenuItem(title: "App Moments", action: nil, keyEquivalent: "")
+        let msub = NSMenu()
+        for f in MomentFrequency.allCases {
+            let mi = NSMenuItem(title: f.title, action: #selector(setFrequency(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = f.rawValue
+            mi.state = settings.momentFrequency == f ? .on : .off
+            msub.addItem(mi)
+        }
+        msub.addItem(.separator())
+        for m in Moment.allCases {
+            let mi = NSMenuItem(title: m.title, action: #selector(toggleMoment(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = m.rawValue
+            mi.state = settings.momentEnabled(m) ? .on : .off
+            msub.addItem(mi)
+        }
+        msub.addItem(.separator())
+        let score = settings.paddleScore
+        let scoreItem = NSMenuItem(title: "Paddle ball score: \(score.left) – \(score.right)", action: nil, keyEquivalent: "")
+        scoreItem.isEnabled = false
+        msub.addItem(scoreItem)
+        let reset = NSMenuItem(title: "Reset Score", action: #selector(resetScore), keyEquivalent: "")
+        reset.target = self
+        msub.addItem(reset)
+        moments.submenu = msub
+        menu.addItem(moments)
 
         menu.addItem(toggle("Claude Code sessions", settings.claudeEnabled, #selector(toggleClaude)))
         menu.addItem(toggle("Idle visits", settings.idleEnabled, #selector(toggleIdle)))
@@ -134,10 +167,22 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func playPreview(_ sender: NSMenuItem) {
-        guard let key = sender.representedObject as? String, let act = Previews.act(key) else { return }
+        guard let key = sender.representedObject as? String else { return }
         // Let the menu close first so the animation isn't hidden behind it.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.presenter.present(act) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.presenter.preview(key) }
     }
+
+    @objc private func setFrequency(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let f = MomentFrequency(rawValue: raw) else { return }
+        settings.momentFrequency = f
+    }
+
+    @objc private func toggleMoment(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let m = Moment(rawValue: raw) else { return }
+        settings.setMoment(m, enabled: !settings.momentEnabled(m))
+    }
+
+    @objc private func resetScore() { settings.paddleScore = (0, 0) }
 
     @objc private func toggleClaude() { settings.claudeEnabled.toggle() }
     @objc private func toggleIdle() { settings.idleEnabled.toggle() }
@@ -178,6 +223,10 @@ enum Previews {
         case "needs": return .card(needs, intro: true)
         case "needs-reminder": return .card(needs, intro: false)
         case "peek": return .peek
+        case "vibe": return .vibe
+        case "hacker-shades": return .hacker(.shades)
+        case "hacker-rain": return .hacker(.rain)
+        case "game": return .game(left: 0, right: 0)
         default:
             if key.hasPrefix("idle-"), let v = IdleVariant(rawValue: String(key.dropFirst(5))) { return .idle(v) }
             return nil

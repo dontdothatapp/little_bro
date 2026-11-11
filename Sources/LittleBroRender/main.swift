@@ -26,6 +26,7 @@ struct Options {
     var trace = false
     var scale = 2.0
     var frames = true
+    var seed: UInt64 = 7
 }
 
 func parse() -> Options {
@@ -55,6 +56,7 @@ func parse() -> Options {
         case "--trace": o.trace = true
         case "--scale": o.scale = Double(value()) ?? 2
         case "--no-frames": o.frames = false
+        case "--seed": o.seed = UInt64(value()) ?? 7
         default: break
         }
         i += 1
@@ -73,6 +75,10 @@ func act(named name: String) -> Act? {
     case "needs": return .card(sampleNeeds, intro: true)
     case "needs-reminder": return .card(sampleNeeds, intro: false)
     case "peek": return .peek
+    case "vibe": return .vibe
+    case "hacker-shades": return .hacker(.shades)
+    case "hacker-rain": return .hacker(.rain)
+    case "game": return .game(left: 8, right: 11)
     default:
         if name.hasPrefix("idle-"), let v = IdleVariant(rawValue: String(name.dropFirst(5))) { return .idle(v) }
         return nil
@@ -83,6 +89,9 @@ func defaultSeconds(_ a: Act) -> Double {
     switch a {
     case .card: return Director.cardDuration + 1.4
     case .peek: return 5.2
+    case .vibe: return Director.vibeDuration + 1.3
+    case .hacker(let s): return s == .shades ? 9.2 : 8.4
+    case .game: return 12
     case .idle(let v):
         switch v {
         case .sleepy: return 8.2
@@ -127,7 +136,7 @@ func run(_ o: Options, actName: String) {
     try? FileManager.default.removeItem(at: outDir)
     try? FileManager.default.createDirectory(at: framesDir, withIntermediateDirectories: true)
 
-    let director = Director(seed: 7)
+    let director = Director(seed: o.seed)
     var hiddenAt: Double?
     director.onHidden = { _ in hiddenAt = hiddenAt ?? -1 }
     director.play(first)
@@ -264,7 +273,8 @@ if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "--icon" {
 
 let options = parse()
 if options.act == "all" {
-    for name in ["done", "done-reminder", "needs", "needs-reminder", "peek"] + IdleVariant.allCases.map({ "idle-\($0.rawValue)" }) {
+    for name in ["done", "done-reminder", "needs", "needs-reminder", "peek", "vibe", "hacker-shades", "hacker-rain", "game"]
+        + IdleVariant.allCases.map({ "idle-\($0.rawValue)" }) {
         run(options, actName: name)
     }
 } else {

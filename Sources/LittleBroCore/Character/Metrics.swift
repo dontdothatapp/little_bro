@@ -9,7 +9,7 @@ public enum Metrics {
     public static let minEyeLine: Double = 1.3
     public static let maxLookX: Double = 10
     public static let maxLookY: Double = 5.5
-    public static let peekBottomPad: Double = 8
+    public static let peekBottomPad: Double = 5
 
     // Body
     public static let earRadius: Double = 9
@@ -19,9 +19,9 @@ public enum Metrics {
     public static let blushColor = RGBA(1.0, 0.47, 0.52)
 
     // Poses
-    public static let compact = CGSize(width: 120, height: 50)
-    public static let idle = CGSize(width: 102, height: 48)
-    public static let peek = CGSize(width: 86, height: 33)
+    public static let compact = CGSize(width: 120, height: 40)
+    public static let idle = CGSize(width: 102, height: 40)
+    public static let peek = CGSize(width: 80, height: 25)
     public static let hoverGrow = CGSize(width: 10, height: 4)
 
     // Card layout
@@ -34,7 +34,7 @@ public enum Metrics {
     public static let recapMaxWidth: Double = 250
     public static let recapLines = 2
     public static let recapGap: Double = 6
-    public static let recapBottomPad: Double = 12
+    public static let recapBottomPad: Double = 11
 
     /// Size of the transparent window the scene is drawn into.
     public static let canvas = CGSize(width: 560, height: 200)

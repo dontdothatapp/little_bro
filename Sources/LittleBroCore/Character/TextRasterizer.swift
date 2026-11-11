@@ -6,6 +6,13 @@ public enum TextStyle: Hashable, Sendable {
     case title
     case badge
     case recap
+    /// Terminal text (SF Mono).
+    case mono
+    case monoBold
+    /// Tiny glyphs for the code rain.
+    case rain
+    /// Scoreboard digits.
+    case score
 
     var pointSize: CGFloat {
         switch self {
@@ -13,6 +20,10 @@ public enum TextStyle: Hashable, Sendable {
         case .title: 13
         case .badge: 11
         case .recap: 11.5
+        case .mono: 10.5
+        case .monoBold: 11.5
+        case .rain: 8.5
+        case .score: 10
         }
     }
 
@@ -22,6 +33,17 @@ public enum TextStyle: Hashable, Sendable {
         case .title: .semibold
         case .badge: .semibold
         case .recap: .regular
+        case .mono: .semibold
+        case .monoBold: .heavy
+        case .rain: .medium
+        case .score: .bold
+        }
+    }
+
+    var isMonospaced: Bool {
+        switch self {
+        case .mono, .monoBold, .rain, .score: true
+        default: false
         }
     }
 }
@@ -62,6 +84,11 @@ public final class TextRasterizer {
 
     func font(_ style: TextStyle) -> CTFont {
         if let f = fonts[style] { return f }
+        if style.isMonospaced {
+            let mono = NSFont.monospacedSystemFont(ofSize: style.pointSize, weight: style.weight) as CTFont
+            fonts[style] = mono
+            return mono
+        }
         let base = NSFont.systemFont(ofSize: style.pointSize, weight: style.weight)
         let descriptor = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
         let font = (NSFont(descriptor: descriptor, size: style.pointSize) ?? base) as CTFont
@@ -116,7 +143,7 @@ public final class TextRasterizer {
         }
         guard let image = ctx.makeImage() else { return nil }
         let out = Output(image: image, size: CGSize(width: size.width + pad * 2, height: size.height + pad * 2))
-        if renders.count > 200 { renders.removeAll() }
+        if renders.count > 800 { renders.removeAll() }
         renders[key] = out
         return out
     }

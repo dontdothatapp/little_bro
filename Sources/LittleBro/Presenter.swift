@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import LittleBroCore
 
 /// Decides what Little Bro does and when: Claude cards first, then YouTube peeks,
@@ -10,7 +11,12 @@ final class Presenter {
     let claude = ClaudeBridge()
     let activity = ActivityMonitor()
     let video = VideoWatcher()
+    let moments = MomentWatcher()
+    let beatTap = AudioBeatTap()
     let settings: Settings
+    private var pendingMoment: (moment: Moment, source: MomentWatcher.Source?, deadline: Date)?
+    /// Previews don't count towards the real paddle score.
+    private var rallyCounts = true
 
     private var idlePlanner = IdleVisitPlanner()
     private var peekPlanner = PeekPlanner()
@@ -41,12 +47,20 @@ final class Presenter {
             self?.tick()
             self?.onStateChange?()
         }
+        director.onRallyPoint = { [weak self] winner in self?.rallyPoint(winner) }
+        beatTap.onEstimate = { [weak self] e in
+            guard let self, self.director.act == .vibe else { return }
+            self.director.syncBeat(bpm: e.bpm, phase: e.phase)
+        }
+        moments.onMoment = { [weak self] m, source in self?.momentTriggered(m, source) }
+        moments.isWanted = { [weak self] m in self?.momentWanted(m) ?? false }
     }
 
     func start() {
         warmUp()
         claude.start()
         video.start()
+        moments.start()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
         timer?.tolerance = 0.1
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
@@ -56,10 +70,11 @@ final class Presenter {
     /// Loads fonts and exercises the path code once, so the first real frame doesn't hitch.
     private func warmUp() {
         let raster = TextRasterizer.shared
-        for style in [TextStyle.status, .title, .badge, .recap] {
+        for style in [TextStyle.status, .title, .badge, .recap, .mono, .monoBold, .rain, .score] {
             _ = raster.lineHeight(style)
-            _ = raster.render("Warm up 0123", style: style, color: .white, maxWidth: 200, maxLines: 2, scale: 2)
+            _ = raster.render("Warm up 0123 █░", style: style, color: .white, maxWidth: 200, maxLines: 2, scale: 2)
         }
+        CodeRainOverlay.warmUp(scale: 2)
         let scratch = Director(seed: 1)
         scratch.play(.card(Card(kind: .needsInput, status: "x", title: "y"), intro: true))
         for _ in 0..<90 { _ = scratch.update(dt: 1.0 / 60, input: FrameInput()) }
@@ -78,6 +93,7 @@ final class Presenter {
             view.start()
         }
         Log.info("play \(describe(act))")
+        if act != .vibe && beatTap.isRunning { beatTap.stop() }
         director.play(act)
     }
 
@@ -86,6 +102,9 @@ final class Presenter {
         case .card(let c, let intro): return "card \(c.kind) '\(c.title)' intro=\(intro)"
         case .idle(let v): return "idle \(v.rawValue)"
         case .peek: return "peek"
+        case .vibe: return "vibe"
+        case .hacker(let style): return "hacker \(style.rawValue)"
+        case .game(let l, let r): return "game \(l):\(r)"
         }
     }
 
@@ -95,6 +114,7 @@ final class Presenter {
     }
 
     private func actEnded(_ act: Act?) {
+        if act == .vibe || director.act != .vibe { beatTap.stop() }
         if let sid = cardSession, act?.isCard == true {
             // Reminder interval counts from when it went away.
             claude.tracker.markShown(sid, at: Date())
@@ -149,6 +169,25 @@ final class Presenter {
             }
         }
 
+        if let pm = pendingMoment {
+            if now > pm.deadline || !momentWanted(pm.moment) {
+                pendingMoment = nil
+            } else if canShowMoment {
+                if pm.moment == .music {
+                    // Wait until music is actually coming out of Spotify.
+                    let prefixes = pm.source.map(AudioProcesses.prefixes(for:)) ?? ["com.spotify.client"]
+                    let playing = AudioProcesses.playing(prefixes: prefixes)
+                    if !playing.isEmpty {
+                        playMoment(.music, audio: playing)
+                        return
+                    }
+                } else {
+                    playMoment(pm.moment, audio: [])
+                    return
+                }
+            }
+        }
+
         let ambientBlocked = director.act != nil || director.isRetracting || !activity.screenAvailable
         if settings.peeksEnabled,
            peekPlanner.update(now: mono, watching: video.isWatching, blocked: ambientBlocked, rng: &rng) {
@@ -159,6 +198,72 @@ final class Presenter {
            idlePlanner.update(now: mono, mouseIdle: activity.mouseIdle, inputIdle: activity.inputIdle,
                               blocked: ambientBlocked || video.videoPlaying, rng: &rng) {
             present(.idle(picker.next(&rng)))
+        }
+    }
+
+    // MARK: - App moments
+
+    private var canShowMoment: Bool {
+        switch director.act {
+        case nil, .idle?, .peek?: return true
+        default: return false
+        }
+    }
+
+    func momentWanted(_ m: Moment) -> Bool {
+        settings.momentEnabled(m) && !settings.isPaused && settings.momentGate.allows(m, now: Date())
+    }
+
+    private func momentTriggered(_ m: Moment, _ source: MomentWatcher.Source) {
+        guard momentWanted(m), activity.screenAvailable else { return }
+        // Music waits (up to a minute) for playback to start; the others for a card to finish.
+        pendingMoment = (m, source, Date().addingTimeInterval(m == .music ? 60 : 15))
+        tick()
+    }
+
+    private func playMoment(_ m: Moment, audio: [AudioObjectID]) {
+        pendingMoment = nil
+        var gate = settings.momentGate
+        gate.record(m, at: Date())
+        settings.momentGate = gate
+        switch m {
+        case .music:
+            present(.vibe)
+            if !audio.isEmpty { beatTap.start(processes: audio) }
+        case .hacker:
+            // The two Hackermen take turns.
+            let style: HackerStyle = settings.lastHackerStyle == .shades ? .rain : .shades
+            settings.lastHackerStyle = style
+            present(.hacker(style))
+        case .gaming:
+            rallyCounts = true
+            let s = settings.paddleScore
+            present(.game(left: s.left, right: s.right))
+        }
+        onStateChange?()
+    }
+
+    private func rallyPoint(_ winner: Int) {
+        guard rallyCounts else { return }
+        var s = settings.paddleScore
+        if winner < 0 { s.left += 1 } else { s.right += 1 }
+        settings.paddleScore = s
+        Log.info("paddle point to \(winner < 0 ? "left" : "right") → \(s.left):\(s.right)")
+    }
+
+    /// Plays an animation from the menu or `littlebro://play/<key>` (never counts towards the score).
+    func preview(_ key: String) {
+        switch key {
+        case "vibe":
+            present(.vibe)
+            let playing = AudioProcesses.playing(prefixes: ["com.spotify.client"])
+            if !playing.isEmpty { beatTap.start(processes: playing) }
+        case "game":
+            rallyCounts = false
+            let s = settings.paddleScore
+            present(.game(left: s.left, right: s.right))
+        default:
+            if let act = Previews.act(key) { present(act) }
         }
     }
 

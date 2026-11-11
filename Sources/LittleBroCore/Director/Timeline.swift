@@ -19,6 +19,14 @@ final class Timeline {
         cues.append(Cue(at: t, order: cues.count, run: run))
     }
 
+    /// Adds a cue `delay` seconds from now (works after `start()`).
+    func after(_ delay: Double, _ run: @escaping (Director) -> Void) {
+        let cue = Cue(at: time + delay, order: cues.count, run: run)
+        var i = index
+        while i < cues.count, cues[i].at <= cue.at { i += 1 }
+        cues.insert(cue, at: i)
+    }
+
     func start() {
         cues.sort { $0.at == $1.at ? $0.order < $1.order : $0.at < $1.at }
         index = 0

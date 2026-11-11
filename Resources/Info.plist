@@ -34,12 +34,14 @@
 		</dict>
 	</array>
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>14.2</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Little Bro listens to the music Spotify is playing only to find its beat, so it can nod along. Nothing is recorded, saved or sent anywhere.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Little Bro checks whether the video playing in your browser is on YouTube, so it can peek in while you watch. It only reads the address of the front tab.</string>
+	<string>Little Bro reads the address of your browser's front tab to notice YouTube, Spotify and game stores, so it can react. Nothing else is read.</string>
 </dict>
 </plist>

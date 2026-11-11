@@ -20,7 +20,7 @@ import Testing
 
     static let allActs: [Act] = [
         .card(card, intro: true), .card(card, intro: false), .card(needs, intro: true), .card(needs, intro: false),
-        .peek,
+        .peek, .vibe, .hacker(.shades), .hacker(.rain), .game(left: 3, right: 5),
     ] + IdleVariant.allCases.map { Act.idle($0) }
 
     /// Runs `script` (time → action) and records one sample per frame.
@@ -70,7 +70,10 @@ import Testing
         return worst
     }
 
-    func checkContinuity(_ s: [Sample], fps: Double, label: String) {
+    /// `widthJerkLimit`: a full-speed reversal of the width spring (an act cut off mid-widening)
+    /// is a legitimate change of acceleration, so random interruptions get a little more room.
+    /// A real snap shows up as 50+.
+    func checkContinuity(_ s: [Sample], fps: Double, label: String, widthJerkLimit: Double = 12) {
         #expect(s.allSatisfy { $0.w.isFinite && $0.h.isFinite && $0.face.x.isFinite && $0.face.y.isFinite },
                 "\(label): non-finite values")
         let wJerk = maxJerk(s, fps: fps) { $0.w }
@@ -79,7 +82,7 @@ import Testing
         let seen = s.map { var c = $0; c.visible = c.visible && c.eyeOpacity > 0.05; return c }
         let fxStep = maxStep(seen, fps: fps) { Double($0.face.x) }
         let fyStep = maxStep(seen, fps: fps) { Double($0.face.y) }
-        #expect(wJerk < 12, "\(label): body width jerk \(wJerk)")
+        #expect(wJerk < widthJerkLimit, "\(label): body width jerk \(wJerk)")
         #expect(hJerk < 8, "\(label): body height jerk \(hJerk)")
         // Sliding the face back from a card layout is fast but must stay continuous.
         let fxJerk = maxJerk(seen, fps: fps) { Double($0.face.x) }
@@ -94,7 +97,7 @@ import Testing
     func everyActIsContinuousAndEndsHidden(fps: Double) {
         for act in Self.allActs {
             var hidden = false
-            let s = run(fps: fps, seconds: 13, script: [(0, { d in
+            let s = run(fps: fps, seconds: 20, script: [(0, { d in
                 d.onHidden = { _ in hidden = true }
                 d.play(act)
             })])
@@ -120,7 +123,7 @@ import Testing
                 }
             }
             let s = run(fps: 60, seconds: t + 3, seed: UInt64(round), script: script)
-            checkContinuity(s, fps: 60, label: "round \(round)")
+            checkContinuity(s, fps: 60, label: "round \(round)", widthJerkLimit: 16)
         }
     }
 

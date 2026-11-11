@@ -164,6 +164,27 @@ public final class Character {
     var glowAmount = Spring(0, .glow)
     var pulseAmount = Spring(0, .glow)
     var blush = Spring(0, .glow)
+    /// Eye colour (white, or tinted for some acts).
+    var eyeR = Spring(1, .glow)
+    var eyeG = Spring(1, .glow)
+    var eyeB = Spring(1, .glow)
+
+    /// Paddle mode: the eyes become two paddles at ±`paddleHalfSpan`, at heights `paddleY`.
+    var paddleMix = Spring(0, SpringParams(response: 0.38, damping: 0.82))
+    public var paddleY: (left: Double, right: Double) = (20, 20)
+    public var paddleHalfSpan: Double = 70
+    /// Paddle height as a fraction of an eye (matches the rally's collision size).
+    public var paddleHeightFactor: Double = 0.726
+
+    /// Beat-driven offsets, recomputed by the director every frame while vibing.
+    public struct Rhythm: Sendable {
+        public var bob = 0.0
+        public var squash = 0.0
+        public var lean = 0.0
+        public var tilt = 0.0
+        public init() {}
+    }
+    public var rhythm = Rhythm()
 
     // Blink: an explicit timed curve (springs are too soft for a blink).
     private var blinkElapsed: Double?
@@ -204,6 +225,11 @@ public final class Character {
         }
         faceScale.snap(to: 1)
         narrow.snap(to: 1)
+        eyeR.snap(to: 1)
+        eyeG.snap(to: 1)
+        eyeB.snap(to: 1)
+        paddleMix.snap(to: 0)
+        rhythm = Rhythm()
         spacing.snap(to: 1)
         lookY.snap(to: 0.15)
         left.snap(EyeShape())
@@ -230,6 +256,12 @@ public final class Character {
         guard blinkElapsed == nil else { return }
         blinkElapsed = 0
         blinkTiming = slow ? (0.15, 0.08, 0.32) : (0.075, 0.035, 0.16)
+    }
+
+    func setEyeColor(_ c: RGBA) {
+        eyeR.target = c.r
+        eyeG.target = c.g
+        eyeB.target = c.b
     }
 
     func setGlow(_ c: RGBA, amount: Double, pulse: Double) {
@@ -343,6 +375,10 @@ public final class Character {
         glowAmount.step(dt)
         pulseAmount.step(dt)
         blush.step(dt)
+        eyeR.step(dt)
+        eyeG.step(dt)
+        eyeB.step(dt)
+        paddleMix.step(dt)
         sway.step(dt)
         breathe.step(dt)
         stretch.target = min(abs(blobH.velocity) * 0.028, 9)
@@ -395,8 +431,8 @@ public final class Character {
 
     public func scene() -> Scene {
         var s = Scene()
-        var w = max(0, blobW.value + wiggle.value + squash.value * 1.4 - stretch.value)
-        let h = max(0, blobH.value - squash.value + breathe.value * sin(time * 2 * .pi * 0.4))
+        var w = max(0, blobW.value + wiggle.value + (squash.value + rhythm.squash) * 1.4 - stretch.value)
+        let h = max(0, blobH.value - squash.value - rhythm.squash + breathe.value * sin(time * 2 * .pi * 0.4))
         let exiting = clamp(exitMix.value, 0, 1)
         if narrow.value < 0.999 {
             // Narrow with the height on the way out, so it ends as a small drop, not a thin bar.
@@ -404,17 +440,18 @@ public final class Character {
         }
         guard h > 0.25, w > 1 else { return s }
         s.isVisible = true
-        let bodyLean = lean.value + jiggle.value + sway.value * sin(time * 2 * .pi * 0.5)
+        let bodyLean = lean.value + jiggle.value + sway.value * sin(time * 2 * .pi * 0.5) + rhythm.lean
         s.blobPath = Paths.blob(width: w, height: h, cornerRadius: Metrics.maxCorner,
                                 earRadius: Metrics.earRadius, bulge: bulge.value, lean: bodyLean)
         s.blobWidth = w
         s.blobHeight = h
+        s.bodyLean = bodyLean
         s.shadowOpacity = Metrics.shadowOpacity * clamp(h / 28, 0, 1)
 
         // Face placement (rides half of the lean, being halfway down the body).
         let reveal = clamp(textReveal.value, 0, 1.1)
         let faceLeftX = -w / 2 + Metrics.faceBoxWidth / 2
-        var faceCY = eyesY.value + hop.value
+        var faceCY = eyesY.value + hop.value + rhythm.bob
         if exiting > 0.001 { faceCY = lerp(faceCY, min(faceCY, h / 2 - 1), exiting) }
         let faceCX = lerp(faceX.value, faceLeftX, reveal) + bodyLean * clamp(faceCY / max(h, 1), 0, 1)
         s.faceCenter = CGPoint(x: faceCX, y: faceCY)
@@ -430,8 +467,11 @@ public final class Character {
         let ly = clamp(lookY.value, -1.3, 1.3)
         let halfSpan = (Metrics.eyeGap / 2 + Metrics.eyeWidth / 2) * scale * spacing.value * (1 - 0.07 * abs(lx))
         let offX = lx * Metrics.maxLookX * scale
-        let offY = ly * Metrics.maxLookY * scale
-        let rot = tilt.value
+        // Vertical look range shrinks in a short body so the eyes never touch the edge.
+        let room = (rowHeight - profile.topInset - Metrics.eyeHeight * scale) / 2
+        let offY = ly * clamp(room - 3.5, 1.5, Metrics.maxLookY) * scale
+        let pm = clamp(paddleMix.value, 0, 1.05)
+        let rot = (tilt.value + rhythm.tilt) * (1 - min(pm, 1))
         let inner = w / 2 - 1.5
         for (side, eye) in [(-1.0, left.value), (1.0, right.value)] {
             // Perspective (the eye on the near side grows) — but not with slanted lids,
@@ -439,11 +479,16 @@ public final class Character {
             let slant = clamp(abs(eye.lidAngle) / 0.2, 0, 1)
             let perspective = 1 + 0.07 * lx * side * (1 - slant)
             let squint = 1 + 0.12 * (1 - min(openness, 1))
-            let ew = Metrics.eyeWidth * scale * eye.width * perspective * squint
-            let eh = max(Metrics.minEyeLine, Metrics.eyeHeight * scale * eye.height * perspective * openness)
+            let ew = Metrics.eyeWidth * scale * eye.width * perspective * squint * lerp(1, 0.42, pm)
+            let eh = max(Metrics.minEyeLine,
+                         Metrics.eyeHeight * scale * eye.height * perspective * openness * lerp(1, paddleHeightFactor, pm))
             let local = side * halfSpan
-            let cx = faceCX + offX + local * cos(rot)
-            let cy = faceCY + offY + local * sin(rot)
+            var cx = faceCX + offX * (1 - pm) + local * cos(rot)
+            var cy = faceCY + offY * (1 - pm) + local * sin(rot)
+            if pm > 0.0001 {
+                cx = lerp(cx, faceCX + side * paddleHalfSpan, pm)
+                cy = lerp(cy, side < 0 ? paddleY.left : paddleY.right, pm)
+            }
             s.eyes.append(Paths.eye(center: CGPoint(x: cx, y: cy), width: ew, height: eh,
                                     roundness: eye.roundness, lidTop: eye.lidTop, lidAngle: eye.lidAngle,
                                     side: side, happy: eye.happy, rotation: rot))
@@ -458,6 +503,7 @@ public final class Character {
             }
         }
         s.blushOpacity = clamp(blush.value, 0, 1) * s.eyeOpacity
+        s.eyeColor = RGBA(clamp(eyeR.value, 0, 1), clamp(eyeG.value, 0, 1), clamp(eyeB.value, 0, 1))
         s.blushColor = Metrics.blushColor
 
         // Glow: soft and white normally; tighter, brighter and pulsing when it needs you.

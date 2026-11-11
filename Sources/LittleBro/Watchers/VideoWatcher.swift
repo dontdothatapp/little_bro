@@ -90,7 +90,7 @@ final class VideoWatcher {
         var answered = false
         var denied = false
         for id in chromium where running.contains(id) {
-            switch osascript("tell application id \"\(id)\" to get URL of active tab of every window") {
+            switch AppleScript.run("tell application id \"\(id)\" to get URL of active tab of every window") {
             case .success(let out):
                 answered = true
                 if isYouTube(out) { return true }
@@ -99,7 +99,7 @@ final class VideoWatcher {
             }
         }
         for id in safari where running.contains(id) {
-            switch osascript("tell application id \"\(id)\" to get URL of current tab of every window") {
+            switch AppleScript.run("tell application id \"\(id)\" to get URL of current tab of every window") {
             case .success(let out):
                 answered = true
                 if isYouTube(out) { return true }
@@ -116,33 +116,5 @@ final class VideoWatcher {
         if s.contains("music.youtube.com") && !s.contains("www.youtube.com") { return false }
         return s.contains("youtube.com/watch") || s.contains("youtube.com/shorts") || s.contains("youtube.com/live")
             || s.contains("youtube.com/embed") || s.contains("youtu.be/") || s.contains("youtube-nocookie.com")
-    }
-
-    private enum ScriptResult {
-        case success(String)
-        case denied
-        case failed
-    }
-
-    private static func osascript(_ source: String) -> ScriptResult {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", source]
-        let out = Pipe()
-        let err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        do { try p.run() } catch { return .failed }
-        let deadline = Date().addingTimeInterval(4)
-        while p.isRunning && Date() < deadline { usleep(20_000) }
-        if p.isRunning {
-            p.terminate()
-            return .failed
-        }
-        let o = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let e = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        if p.terminationStatus == 0 { return .success(o) }
-        if e.contains("-1743") || e.lowercased().contains("not authorized") { return .denied }
-        return .failed
     }
 }
