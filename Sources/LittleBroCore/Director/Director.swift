@@ -14,13 +14,17 @@ public struct Card: Equatable, Sendable {
     public var title: String
     public var badge: String?
     public var recap: String?
+    /// Shown right after the title, in the accent colour (e.g. "1 needs you").
+    public var accent: String?
 
-    public init(kind: Kind, status: String, title: String, badge: String? = nil, recap: String? = nil) {
+    public init(kind: Kind, status: String, title: String, badge: String? = nil, recap: String? = nil,
+                accent: String? = nil) {
         self.kind = kind
         self.status = status
         self.title = title
         self.badge = badge
         self.recap = recap
+        self.accent = accent
     }
 }
 
@@ -42,13 +46,24 @@ public enum Act: Equatable, Sendable {
     case hacker(HackerStyle)
     /// One real point of paddle ball; the running score is shown.
     case game(left: Int, right: Int)
+    /// The tiny strip shown while Claude sessions are working. Stays out until replaced.
+    case working(count: Int)
+    /// Something happened on the Mac (charger, download, mute, a device…).
+    case system(SystemEvent)
 
     public var priority: Int {
         switch self {
         case .card(let c, _): return c.kind == .needsInput ? 3 : 2
+        case .system: return 2
         case .peek, .vibe, .hacker, .game: return 1
         case .idle: return 0
+        case .working: return -1
         }
+    }
+
+    public var isWorking: Bool {
+        if case .working = self { return true }
+        return false
     }
 
     public var isCard: Bool {
@@ -75,6 +90,10 @@ enum Gaze: Equatable {
     case cursor
     case wander
     case watch
+    /// Slow left-right scanning (busy).
+    case scan
+    /// Look at a point in scene coordinates.
+    case point(Double, Double)
 }
 
 /// Runs the choreography: decides targets over time, plus the "alive" layer of
@@ -87,6 +106,11 @@ public final class Director {
     public var onHidden: ((Act?) -> Void)?
     /// A paddle-ball point was decided: -1 the left player won, +1 the right one.
     public var onRallyPoint: ((Int) -> Void)?
+    /// Called whenever an act ends — by tucking away or by settling back into `restingAct`.
+    public var onActEnded: ((Act) -> Void)?
+    /// When set, finished acts settle back into this one (the "Claude is working" strip)
+    /// instead of tucking away.
+    public var restingAct: Act?
 
     /// Keeps the beat while vibing; feed it measurements with `syncBeat`.
     public private(set) var beatClock = BeatClock()
@@ -141,9 +165,20 @@ public final class Director {
         case .vibe: buildVibe()
         case .hacker(let style): buildHacker(style)
         case .game(let l, let r): buildGame(left: l, right: r)
+        case .working(let n): buildWorking(count: n)
+        case .system(let e): buildSystem(e)
         }
         timeline.start()
         timeline.advance(0, self)
+    }
+
+    /// Change how many sessions the working strip shows, without restarting it.
+    public func updateWorking(count: Int) {
+        guard case .working = act else { return }
+        act = .working(count: count)
+        if restingAct?.isWorking == true { restingAct = .working(count: count) }
+        for o in overlays { (o as? StripOverlay)?.count = count }
+        character.baseSize.width = count > 1 ? Metrics.strip.width + 12 : Metrics.strip.width
     }
 
     /// Update the text of the card on screen without restarting the choreography.
@@ -156,6 +191,12 @@ public final class Director {
     /// Tuck away. Finishes with `onHidden`.
     public func retract(fast: Bool = false) {
         guard !isRetracting else { return }
+        if let rest = restingAct, let current = act, !current.isWorking {
+            // Settle back into the strip instead of hiding.
+            onActEnded?(current)
+            play(rest)
+            return
+        }
         if character.isFullyHidden {
             let ended = act
             act = nil
@@ -326,6 +367,7 @@ public final class Director {
         rhythmAmount.snap(to: 0)
         isRetracting = false
         let ended = endedAct
+        if let ended { onActEnded?(ended) }
         endedAct = nil
         character.resetHidden(width: 60)
         timeline = Timeline()
@@ -342,6 +384,8 @@ public final class Director {
             nextBlink = clock + 2.5
         }
         character.blobH.params = .blobHeight
+        character.blobW.params = .blobWidth
+        character.open.params = .open
         character.textFading = false
         character.sway.target = 0
         character.breathe.target = 0
@@ -378,6 +422,7 @@ public final class Director {
         character.title.set(card.title, color: RGBA(1, 1, 1, 0.96))
         character.badge.set(card.badge, color: RGBA(1, 1, 1, 0.4))
         character.recap.set(card.recap, color: RGBA(1, 1, 1, 0.62))
+        character.accent.set(card.accent, color: .claude)
         character.textOn = true
     }
 
@@ -452,6 +497,14 @@ public final class Director {
         case .watch:
             tx = 0.4 * sin(clock * 0.75)
             ty = 1.0
+        case .scan:
+            tx = 0.95 * sin(clock * 2.3)
+            ty = 0
+        case .point(let x, let y):
+            let fc = character.lastFaceCenter
+            let dx = x - Double(fc.x), dy = y - Double(fc.y)
+            tx = dx / (dx * dx + 50 * 50).squareRoot()
+            ty = dy / (dy * dy + 22 * 22).squareRoot()
         }
         if hovering, let m = input.mouse {
             // Close up: look right at the cursor, whatever the routine was doing.

@@ -119,6 +119,31 @@ final class Settings {
         set { d.set([newValue.left, newValue.right], forKey: "paddleScore") }
     }
 
+    // MARK: Mac reactions
+
+    enum Reaction: String, CaseIterable {
+        case working, welcome, power, downloads, sound, devices
+
+        var title: String {
+            switch self {
+            case .working: "Claude working strip"
+            case .welcome: "Welcome back summary"
+            case .power: "Charger & low battery"
+            case .downloads: "Downloads"
+            case .sound: "Mute / unmute"
+            case .devices: "Bluetooth devices"
+            }
+        }
+    }
+
+    func reactionEnabled(_ r: Reaction) -> Bool {
+        d.object(forKey: "reaction.\(r.rawValue)") as? Bool ?? true
+    }
+
+    func setReaction(_ r: Reaction, enabled: Bool) {
+        d.set(enabled, forKey: "reaction.\(r.rawValue)")
+    }
+
     var lastHackerStyle: HackerStyle? {
         get { d.string(forKey: "lastHackerStyle").flatMap(HackerStyle.init(rawValue:)) }
         set { d.set(newValue?.rawValue, forKey: "lastHackerStyle") }

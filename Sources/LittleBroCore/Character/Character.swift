@@ -195,6 +195,7 @@ public final class Character {
     var title = TextSlot()
     var badge = TextSlot()
     var recap = TextSlot()
+    var accent = TextSlot()
 
     /// Face centre from the last built scene (used for gaze-at-cursor).
     public private(set) var lastFaceCenter = CGPoint(x: 0, y: 25)
@@ -238,6 +239,7 @@ public final class Character {
         title.reset()
         badge.reset()
         recap.reset()
+        accent.reset()
         textOn = false
         textFading = false
         recapOn = false
@@ -301,6 +303,10 @@ public final class Character {
         }
         if let t = title.desired {
             titleW = Double(r.measure(t, style: .title, maxWidth: Metrics.maxTextWidth - badgeW).width)
+        }
+        if let a = accent.desired {
+            titleW += Double(r.measure(a, style: .title, maxWidth: Metrics.maxTextWidth).width)
+                + (title.desired != nil ? Metrics.accentGap : 0)
         }
         w = max(w, titleW + badgeW)
         return min(w, Metrics.maxTextWidth)
@@ -415,6 +421,7 @@ public final class Character {
         status.step(dt, visible: roomForText)
         title.step(dt, visible: roomForText)
         badge.step(dt, visible: roomForText)
+        accent.step(dt, visible: roomForText)
         recap.step(dt, visible: showRecap && !textFading && recapReveal.value > 0.5)
     }
 
@@ -542,6 +549,16 @@ public final class Character {
                                         origin: CGPoint(x: textX + f.dx, y: blockTop + statusH), maxWidth: maxW,
                                         maxLines: 1, opacity: o, blur: f.blur))
             }
+        }
+        if let text = accent.shown, accent.opacity.value > 0.005 {
+            let o = clamp(accent.opacity.value, 0, 1)
+            let f = fade(o)
+            let x = textX + titleW + (titleW > 0 ? Metrics.accentGap : 0) + f.dx
+            s.texts.append(TextDraw(key: "accent", text: text, style: .title, color: accent.color,
+                                    origin: CGPoint(x: x, y: blockTop + statusH), maxWidth: Metrics.maxTextWidth,
+                                    maxLines: 1, opacity: o, blur: f.blur))
+            titleW += Double(TextRasterizer.shared.measure(text, style: .title, maxWidth: Metrics.maxTextWidth).width)
+                + (titleW > 0 ? Metrics.accentGap : 0)
         }
         if let text = badge.shown, badge.opacity.value > 0.005 {
             let o = clamp(badge.opacity.value, 0, 1)

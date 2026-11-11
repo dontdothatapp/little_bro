@@ -13,7 +13,17 @@ final class Presenter {
     let video = VideoWatcher()
     let moments = MomentWatcher()
     let beatTap = AudioBeatTap()
+    let power = PowerWatcher()
+    let downloads = DownloadsWatcher()
+    let sound = SoundWatcher()
+    let devices = DeviceWatcher()
     let settings: Settings
+    /// A Mac event waiting for a free moment on screen, and what a click on it does.
+    private var pendingSystem: (act: Act, deadline: Date, click: (() -> Void)?)?
+    private var clickAction: (() -> Void)?
+    private var awaySince: Date?
+    private var lastCharging = Date.distantPast
+    private var workingSession: String?
     private var pendingMoment: (moment: Moment, source: MomentWatcher.Source?, deadline: Date)?
     /// Previews don't count towards the real paddle score.
     private var rallyCounts = true
@@ -39,7 +49,7 @@ final class Presenter {
         self.settings = settings
         view = CharacterView(director: director)
         panel.contentView = view
-        director.onHidden = { [weak self] act in self?.actEnded(act) }
+        director.onActEnded = { [weak self] act in self?.actEnded(act) }
         view.onClick = { [weak self] in self?.clicked() }
         view.onRightClick = { [weak self] e in self?.rightClicked(e) }
         view.onHidden = { [weak self] in self?.tuckedAway() }
@@ -54,6 +64,21 @@ final class Presenter {
         }
         moments.onMoment = { [weak self] m, source in self?.momentTriggered(m, source) }
         moments.isWanted = { [weak self] m in self?.momentWanted(m) ?? false }
+        power.onCharging = { [weak self] in
+            guard let self, Date().timeIntervalSince(self.lastCharging) > 5 * 60 else { return }
+            self.lastCharging = Date()
+            self.systemEvent(.charging, wait: 6, reaction: .power)
+        }
+        power.onLow = { [weak self] in self?.systemEvent(.lowBattery, wait: 20, reaction: .power) }
+        downloads.onDownloaded = { [weak self] urls in
+            guard let first = urls.first else { return }
+            self?.systemEvent(.download(name: first.lastPathComponent, count: urls.count), wait: 10, reaction: .downloads,
+                              click: { NSWorkspace.shared.activateFileViewerSelecting(urls) })
+        }
+        sound.onMute = { [weak self] muted in self?.systemEvent(.sound(muted: muted), wait: 1.5, reaction: .sound) }
+        devices.onConnect = { [weak self] kind, name in
+            self?.systemEvent(.device(kind, name: name), wait: 10, reaction: .devices)
+        }
     }
 
     func start() {
@@ -61,6 +86,10 @@ final class Presenter {
         claude.start()
         video.start()
         moments.start()
+        power.start()
+        downloads.start()
+        sound.start()
+        devices.start()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
         timer?.tolerance = 0.1
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
@@ -70,7 +99,7 @@ final class Presenter {
     /// Loads fonts and exercises the path code once, so the first real frame doesn't hitch.
     private func warmUp() {
         let raster = TextRasterizer.shared
-        for style in [TextStyle.status, .title, .badge, .recap, .mono, .monoBold, .rain, .score] {
+        for style in [TextStyle.status, .title, .badge, .recap, .mono, .monoBold, .rain, .score, .micro] {
             _ = raster.lineHeight(style)
             _ = raster.render("Warm up 0123 █░", style: style, color: .white, maxWidth: 200, maxLines: 2, scale: 2)
         }
@@ -105,6 +134,8 @@ final class Presenter {
         case .vibe: return "vibe"
         case .hacker(let style): return "hacker \(style.rawValue)"
         case .game(let l, let r): return "game \(l):\(r)"
+        case .working(let n): return "working \(n)"
+        case .system(let e): return "system \(e)"
         }
     }
 
@@ -114,6 +145,7 @@ final class Presenter {
     }
 
     private func actEnded(_ act: Act?) {
+        clickAction = nil
         if act == .vibe || director.act != .vibe { beatTap.stop() }
         if let sid = cardSession, act?.isCard == true {
             // Reminder interval counts from when it went away.
@@ -144,6 +176,9 @@ final class Presenter {
             director.updateCard(claude.card(for: item, pendingCount: claude.tracker.pending.count))
         }
 
+        updateAway(now)
+        updateWorkingStrip(now)
+
         if settings.isPaused { return }
 
         // Not connected to Claude Code yet: offer it (again) once someone is here.
@@ -169,6 +204,17 @@ final class Presenter {
             }
         }
 
+        if let ps = pendingSystem {
+            if now > ps.deadline {
+                pendingSystem = nil
+            } else if canShowSystem {
+                pendingSystem = nil
+                present(ps.act)
+                clickAction = ps.click
+                return
+            }
+        }
+
         if let pm = pendingMoment {
             if now > pm.deadline || !momentWanted(pm.moment) {
                 pendingMoment = nil
@@ -188,7 +234,8 @@ final class Presenter {
             }
         }
 
-        let ambientBlocked = director.act != nil || director.isRetracting || !activity.screenAvailable
+        let ambientBlocked = (director.act != nil && director.act?.isWorking != true) || director.isRetracting
+            || !activity.screenAvailable
         if settings.peeksEnabled,
            peekPlanner.update(now: mono, watching: video.isWatching, blocked: ambientBlocked, rng: &rng) {
             present(.peek)
@@ -205,10 +252,73 @@ final class Presenter {
 
     private var canShowMoment: Bool {
         switch director.act {
-        case nil, .idle?, .peek?: return true
+        case nil, .idle?, .peek?, .working?: return true
         default: return false
         }
     }
+
+    private var canShowSystem: Bool {
+        switch director.act {
+        case nil, .idle?, .peek?, .working?, .system?: return true
+        default: return false
+        }
+    }
+
+    // MARK: - Mac events
+
+    private func systemEvent(_ e: SystemEvent, wait: TimeInterval, reaction: Settings.Reaction,
+                             click: (() -> Void)? = nil) {
+        guard settings.reactionEnabled(reaction), !settings.isPaused, activity.screenAvailable else { return }
+        pendingSystem = (.system(e), Date().addingTimeInterval(wait), click)
+        tick()
+    }
+
+    /// The "Claude is working" strip: Little Bro's resting state while any session works.
+    private func updateWorkingStrip(_ now: Date) {
+        let sessions = claude.tracker.workingSessions(now: now)
+        let want = settings.claudeEnabled && settings.reactionEnabled(.working) && !settings.isPaused
+            && !sessions.isEmpty && !ClaudeBridge.claudeIsFrontmost && activity.screenAvailable
+        if want {
+            let n = sessions.count
+            workingSession = sessions.first
+            director.restingAct = .working(count: n)
+            if case .working(let current)? = director.act {
+                if current != n { director.updateWorking(count: n) }
+            } else if director.isHidden {
+                present(.working(count: n))
+            }
+        } else if !previewingStrip {
+            workingSession = nil
+            director.restingAct = nil
+            if director.act?.isWorking == true { director.retract() }
+        }
+    }
+
+    /// Back after 10+ minutes away (or the screen was locked/asleep): one summary card.
+    private func updateAway(_ now: Date) {
+        let idle = activity.inputIdle
+        if !activity.screenAvailable || idle >= 600 {
+            if awaySince == nil { awaySince = activity.screenAvailable ? now.addingTimeInterval(-idle) : now }
+            return
+        }
+        guard let since = awaySince, idle < 3 else { return }
+        awaySince = nil
+        guard settings.claudeEnabled, settings.reactionEnabled(.welcome), !settings.isPaused else { return }
+        let fresh = claude.tracker.pending.filter { $0.since >= since }
+        let waiting = fresh.filter { $0.kind.isNeedsInput }.count
+        let finished = fresh.count - waiting
+        guard finished + waiting > 0 else { return }
+        // The summary stands in for the one-by-one reminders right now.
+        for item in claude.tracker.pending { claude.tracker.markShown(item.sessionId, at: now) }
+        let top = claude.tracker.pending.first
+        Log.info("welcome back: \(finished) finished, \(waiting) waiting")
+        pendingSystem = (.system(.welcome(finished: finished, waiting: waiting)), now.addingTimeInterval(10), { [weak self] in
+            if let top { self?.claude.open(top) }
+            self?.onStateChange?()
+        })
+    }
+
+    private var previewingStrip = false
 
     func momentWanted(_ m: Moment) -> Bool {
         settings.momentEnabled(m) && !settings.isPaused && settings.momentGate.allows(m, now: Date())
@@ -262,6 +372,15 @@ final class Presenter {
             rallyCounts = false
             let s = settings.paddleScore
             present(.game(left: s.left, right: s.right))
+        case "working":
+            previewingStrip = true
+            director.restingAct = .working(count: 2)
+            present(.working(count: 2))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self else { return }
+                self.previewingStrip = false
+                self.tick()
+            }
         default:
             if let act = Previews.act(key) { present(act) }
         }
@@ -293,6 +412,16 @@ final class Presenter {
 
     private func clicked() {
         guard let act = director.act else { return }
+        if let action = clickAction {
+            clickAction = nil
+            action()
+            director.acknowledge()
+            return
+        }
+        if act.isWorking {
+            if let sid = workingSession { claude.openSession(cliId: sid) }
+            return
+        }
         if cardSession == Self.setupSession {
             cardSession = nil
             do {

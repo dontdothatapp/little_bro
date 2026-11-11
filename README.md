@@ -16,6 +16,22 @@ What it does today:
   shyly. Move the cursor while it's out and it startles back into hiding.
 - **YouTube peeks.** While you watch a YouTube video, small eyes peek down at it for a
   few seconds every few minutes.
+- **While Claude works**, a tiny 12 pt strip with little scanning eyes sits at the notch
+  (with a count if several sessions are busy); when a session finishes, the strip grows
+  into the "Finished" card. Hidden while you're in the Claude app. Click to open the session.
+- **Welcome back.** After 10+ minutes away (or a locked/asleep screen), one card sums up
+  what happened ("2 finished · 1 needs you"); click to open the most important session.
+- **Your Mac** (each can be switched off under *Your Mac* in the menu):
+  - Charger plugged in: a lightning bolt zaps between the eyes. Battery at 15%: tired,
+    sagging, with a blinking red battery.
+  - A download finishes: the file floats up and gets gulped; click to reveal it in Finder.
+    (macOS asks once for access to the Downloads folder.)
+  - Mute: the eyes shrink to tiny dots next to a crossed-out speaker. Unmute: they grow
+    back to full size with sound waves.
+  - Bluetooth devices connecting — AirPods pop in at its sides; over-ear headphones drop
+    on and the noise fades out; a game controller brings out the game face; a mouse or
+    trackpad gets a tiny cursor to chase; a keyboard gets keycaps that type. Anything else
+    shows a "Connected" card. No Bluetooth permission needed.
 - **App moments** (at most once every 3 hours each, or every time — see the menu):
   - **Spotify** (app or open.spotify.com): headphones on, eyes closed, head-bobbing to the
     song's real tempo. Little Bro listens to Spotify's audio *only* to find the beat — the
@@ -54,8 +70,10 @@ pages don't trigger moments.
 
 ```bash
 open "littlebro://play/done"        # also: done-reminder, needs, needs-reminder, peek, vibe,
-                                    # hacker-shades, hacker-rain, game, idle-lookAround,
-                                    # idle-sleepy, idle-hello, idle-curious, idle-shy
+                                    # hacker-shades, hacker-rain, game, working, welcome,
+                                    # charging, low-battery, download, mute, unmute, airpods,
+                                    # overear, controller, mouse, keyboard, device,
+                                    # idle-lookAround, idle-sleepy, idle-hello, idle-curious, idle-shy
 open "littlebro://debug/snapshot"   # writes the current frame to ~/Library/Application Support/LittleBro
 ```
 

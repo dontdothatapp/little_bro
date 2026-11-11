@@ -79,6 +79,20 @@ func act(named name: String) -> Act? {
     case "hacker-shades": return .hacker(.shades)
     case "hacker-rain": return .hacker(.rain)
     case "game": return .game(left: 8, right: 11)
+    case "working": return .working(count: 1)
+    case "working-2": return .working(count: 2)
+    case "charging": return .system(.charging)
+    case "low-battery": return .system(.lowBattery)
+    case "download": return .system(.download(name: "little-bro-0.2.dmg", count: 1))
+    case "mute": return .system(.sound(muted: true))
+    case "unmute": return .system(.sound(muted: false))
+    case "welcome": return .system(.welcome(finished: 2, waiting: 1))
+    case "airpods": return .system(.device(.airpods, name: "AirPods Pro"))
+    case "overear": return .system(.device(.overEar, name: "WH-1000XM5"))
+    case "controller": return .system(.device(.controller, name: "Xbox Wireless Controller"))
+    case "mouse": return .system(.device(.mouse, name: "M720 Triathlon"))
+    case "keyboard": return .system(.device(.keyboard, name: "Rainy 75"))
+    case "device": return .system(.device(.other, name: "Yealink-CP960"))
     default:
         if name.hasPrefix("idle-"), let v = IdleVariant(rawValue: String(name.dropFirst(5))) { return .idle(v) }
         return nil
@@ -92,6 +106,15 @@ func defaultSeconds(_ a: Act) -> Double {
     case .vibe: return Director.vibeDuration + 1.3
     case .hacker(let s): return s == .shades ? 9.2 : 8.4
     case .game: return 12
+    case .working: return 4
+    case .system(let e):
+        switch e {
+        case .welcome: return 9
+        case .download: return 7.2
+        case .lowBattery: return 5.6
+        case .device(let k, _): return k == .overEar ? 7.2 : 6.5
+        default: return 4
+        }
     case .idle(let v):
         switch v {
         case .sleepy: return 8.2
@@ -273,7 +296,9 @@ if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "--icon" {
 
 let options = parse()
 if options.act == "all" {
-    for name in ["done", "done-reminder", "needs", "needs-reminder", "peek", "vibe", "hacker-shades", "hacker-rain", "game"]
+    for name in ["done", "done-reminder", "needs", "needs-reminder", "peek", "vibe", "hacker-shades", "hacker-rain", "game",
+                 "working", "charging", "low-battery", "download", "mute", "unmute", "welcome", "airpods", "overear",
+                 "controller", "mouse", "keyboard", "device"]
         + IdleVariant.allCases.map({ "idle-\($0.rawValue)" }) {
         run(options, actName: name)
     }

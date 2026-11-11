@@ -77,6 +77,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                              ("Hackerman: code rain", "hacker-rain"), ("Gaming: paddle ball", "game")] {
             sub.addItem(previewItem(title, key))
         }
+        sub.addItem(.separator())
+        for (title, key) in [("Claude working strip", "working"), ("Welcome back", "welcome"),
+                             ("Charger plugged in", "charging"), ("Battery low", "low-battery"),
+                             ("Download finished", "download"), ("Mute", "mute"), ("Unmute", "unmute"),
+                             ("AirPods", "airpods"), ("Over-ear headphones", "overear"),
+                             ("Game controller", "controller"), ("Mouse / trackpad", "mouse"), ("Keyboard", "keyboard"),
+                             ("Other Bluetooth device", "device")] {
+            sub.addItem(previewItem(title, key))
+        }
         preview.submenu = sub
         menu.addItem(preview)
         menu.addItem(.separator())
@@ -108,6 +117,18 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         msub.addItem(reset)
         moments.submenu = msub
         menu.addItem(moments)
+
+        let mac = NSMenuItem(title: "Your Mac", action: nil, keyEquivalent: "")
+        let macSub = NSMenu()
+        for r in Settings.Reaction.allCases {
+            let mi = NSMenuItem(title: r.title, action: #selector(toggleReaction(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = r.rawValue
+            mi.state = settings.reactionEnabled(r) ? .on : .off
+            macSub.addItem(mi)
+        }
+        mac.submenu = macSub
+        menu.addItem(mac)
 
         menu.addItem(toggle("Claude Code sessions", settings.claudeEnabled, #selector(toggleClaude)))
         menu.addItem(toggle("Idle visits", settings.idleEnabled, #selector(toggleIdle)))
@@ -184,6 +205,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     @objc private func resetScore() { settings.paddleScore = (0, 0) }
 
+    @objc private func toggleReaction(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let r = Settings.Reaction(rawValue: raw) else { return }
+        settings.setReaction(r, enabled: !settings.reactionEnabled(r))
+    }
+
     @objc private func toggleClaude() { settings.claudeEnabled.toggle() }
     @objc private func toggleIdle() { settings.idleEnabled.toggle() }
     @objc private func togglePeeks() { settings.peeksEnabled.toggle() }
@@ -227,6 +253,19 @@ enum Previews {
         case "hacker-shades": return .hacker(.shades)
         case "hacker-rain": return .hacker(.rain)
         case "game": return .game(left: 0, right: 0)
+        case "working": return .working(count: 2)
+        case "welcome": return .system(.welcome(finished: 2, waiting: 1))
+        case "charging": return .system(.charging)
+        case "low-battery": return .system(.lowBattery)
+        case "download": return .system(.download(name: "little-bro-0.2.dmg", count: 1))
+        case "mute": return .system(.sound(muted: true))
+        case "unmute": return .system(.sound(muted: false))
+        case "airpods": return .system(.device(.airpods, name: "AirPods Pro"))
+        case "overear": return .system(.device(.overEar, name: "WH-1000XM5"))
+        case "controller": return .system(.device(.controller, name: "Xbox Wireless Controller"))
+        case "mouse": return .system(.device(.mouse, name: "M720 Triathlon"))
+        case "keyboard": return .system(.device(.keyboard, name: "Rainy 75"))
+        case "device": return .system(.device(.other, name: "Yealink-CP960"))
         default:
             if key.hasPrefix("idle-"), let v = IdleVariant(rawValue: String(key.dropFirst(5))) { return .idle(v) }
             return nil

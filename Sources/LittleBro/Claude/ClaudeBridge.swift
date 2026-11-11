@@ -112,6 +112,16 @@ final class ClaudeBridge {
         tracker.clear(item.sessionId)
     }
 
+    /// Opens a session by its Claude Code id (falls back to just activating Claude).
+    func openSession(cliId: String) {
+        sessions.refresh(force: true)
+        if let url = sessions.session(forCliId: cliId)?.openURL {
+            NSWorkspace.shared.open(url)
+        } else if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.claudeBundleId) {
+            NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+
     static var claudeIsFrontmost: Bool {
         NSWorkspace.shared.frontmostApplication?.bundleIdentifier == claudeBundleId
     }

@@ -64,6 +64,8 @@ public struct AttentionItem: Equatable, Sendable {
 /// Turns the stream of hook events into "which sessions are waiting for me, and why".
 public final class AttentionTracker {
     public private(set) var items: [String: AttentionItem] = [:]
+    /// Sessions currently working (last activity time), for the "Claude is working" strip.
+    public private(set) var working: [String: Date] = [:]
 
     public init() {}
 
@@ -75,6 +77,44 @@ public final class AttentionTracker {
 
     @discardableResult
     public func handle(_ e: HookEvent) -> Change {
+        trackWork(e)
+        return handleAttention(e)
+    }
+
+    private func trackWork(_ e: HookEvent) {
+        let sid = e.sessionId
+        switch e.name {
+        case "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "SubagentStart", "PreCompact",
+             "ElicitationResult":
+            working[sid] = e.receivedAt
+        case "PreToolUse":
+            if e.toolName == "AskUserQuestion" || e.toolName == "ExitPlanMode" {
+                working.removeValue(forKey: sid)
+            } else {
+                working[sid] = e.receivedAt
+            }
+        case "Stop", "StopFailure", "SessionEnd", "PermissionRequest", "Elicitation":
+            working.removeValue(forKey: sid)
+        case "Notification":
+            if e.notificationType == "permission_prompt" || e.notificationType == "elicitation_dialog" {
+                working.removeValue(forKey: sid)
+            }
+        default:
+            break
+        }
+    }
+
+    /// Sessions that are working right now. A session that has gone quiet for `staleAfter`
+    /// (e.g. Claude crashed mid-turn) stops counting.
+    public func workingSessions(now: Date, staleAfter: TimeInterval = 600) -> [String] {
+        working.filter { now.timeIntervalSince($0.value) < staleAfter }.sorted { $0.value > $1.value }.map(\.key)
+    }
+
+    public func stopWorking(_ sid: String) {
+        working.removeValue(forKey: sid)
+    }
+
+    private func handleAttention(_ e: HookEvent) -> Change {
         let sid = e.sessionId
         switch e.name {
         case "Stop":

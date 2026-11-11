@@ -22,6 +22,8 @@ public enum Metrics {
     public static let compact = CGSize(width: 120, height: 40)
     public static let idle = CGSize(width: 102, height: 40)
     public static let peek = CGSize(width: 80, height: 25)
+    /// The "Claude is working" strip.
+    public static let strip = CGSize(width: 62, height: 12)
     public static let hoverGrow = CGSize(width: 10, height: 4)
 
     // Card layout
@@ -31,6 +33,8 @@ public enum Metrics {
     public static let maxTextWidth: Double = 220
     public static let badgePadX: Double = 5
     public static let badgeGap: Double = 7
+    /// Space between a card title and its coloured accent part.
+    public static let accentGap: Double = 4
     public static let recapMaxWidth: Double = 250
     public static let recapLines = 2
     public static let recapGap: Double = 6

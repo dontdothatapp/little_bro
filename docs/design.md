@@ -32,6 +32,18 @@ liquid-feeling shape that grows out of the top edge of the screen.
      when it changes.
    Claude cards always take priority; a moment that can't show within 15 s is dropped.
 
+5. **Claude working strip & welcome back.** Hooks also mark sessions as *working* (prompt →
+   stop / waiting on you, 10-minute staleness guard). While any session works, a 12 pt strip
+   with tiny scanning eyes is Little Bro's resting state (`Director.restingAct`): other acts
+   morph out of it and settle back into it. After 10+ minutes away, a single summary card
+   replaces the one-by-one reminders.
+6. **Your Mac.** Charger plugged in (IOKit power sources, 5-minute cooldown), battery at 15%
+   (once per discharge), finished downloads (~/Downloads, partial files ignored), mute/unmute
+   (Core Audio default-output mute: eyes shrink to / grow from tiny dots with a speaker icon),
+   Bluetooth devices (Core Audio Bluetooth outputs by name → AirPods / over-ear / other; I/O
+   Registry HID services by usage → controller / mouse / keyboard; 10-minute per-device grace).
+   None needs a permission except the Downloads folder.
+
 ## Decisions (made autonomously while the owner was away)
 
 | Area | Decision | Why |

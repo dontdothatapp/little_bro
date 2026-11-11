@@ -13,6 +13,8 @@ public enum TextStyle: Hashable, Sendable {
     case rain
     /// Scoreboard digits.
     case score
+    /// Tiny numbers on the working strip.
+    case micro
 
     var pointSize: CGFloat {
         switch self {
@@ -24,6 +26,7 @@ public enum TextStyle: Hashable, Sendable {
         case .monoBold: 11.5
         case .rain: 8.5
         case .score: 10
+        case .micro: 8.5
         }
     }
 
@@ -37,6 +40,7 @@ public enum TextStyle: Hashable, Sendable {
         case .monoBold: .heavy
         case .rain: .medium
         case .score: .bold
+        case .micro: .semibold
         }
     }
 

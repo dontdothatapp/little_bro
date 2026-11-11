@@ -21,7 +21,10 @@ import Testing
     static let allActs: [Act] = [
         .card(card, intro: true), .card(card, intro: false), .card(needs, intro: true), .card(needs, intro: false),
         .peek, .vibe, .hacker(.shades), .hacker(.rain), .game(left: 3, right: 5),
+        .system(.charging), .system(.lowBattery), .system(.download(name: "file.zip", count: 1)),
+        .system(.sound(muted: true)), .system(.sound(muted: false)), .system(.welcome(finished: 2, waiting: 1)),
     ] + IdleVariant.allCases.map { Act.idle($0) }
+        + DeviceKind.allCases.map { Act.system(.device($0, name: "Device")) }
 
     /// Runs `script` (time → action) and records one sample per frame.
     func run(fps: Double, seconds: Double, seed: UInt64 = 1, hover: ClosedRange<Double>? = nil,
