@@ -80,6 +80,7 @@ func act(named name: String) -> Act? {
     case "hacker-rain": return .hacker(.rain)
     case "game": return .game(left: 8, right: 11)
     case "working": return .working(count: 1)
+    case "hearts": return .hearts
     case "working-2": return .working(count: 2)
     case "charging": return .system(.charging)
     case "low-battery": return .system(.lowBattery)
@@ -107,6 +108,7 @@ func defaultSeconds(_ a: Act) -> Double {
     case .hacker(let s): return s == .shades ? 9.2 : 8.4
     case .game: return 12
     case .working: return 4
+    case .hearts: return 7.6
     case .system(let e):
         switch e {
         case .welcome: return 9
@@ -298,7 +300,7 @@ let options = parse()
 if options.act == "all" {
     for name in ["done", "done-reminder", "needs", "needs-reminder", "peek", "vibe", "hacker-shades", "hacker-rain", "game",
                  "working", "charging", "low-battery", "download", "mute", "unmute", "welcome", "airpods", "overear",
-                 "controller", "mouse", "keyboard", "device"]
+                 "controller", "mouse", "keyboard", "device", "hearts"]
         + IdleVariant.allCases.map({ "idle-\($0.rawValue)" }) {
         run(options, actName: name)
     }

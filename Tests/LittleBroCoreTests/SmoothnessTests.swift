@@ -20,7 +20,7 @@ import Testing
 
     static let allActs: [Act] = [
         .card(card, intro: true), .card(card, intro: false), .card(needs, intro: true), .card(needs, intro: false),
-        .peek, .vibe, .hacker(.shades), .hacker(.rain), .game(left: 3, right: 5),
+        .peek, .vibe, .hacker(.shades), .hacker(.rain), .game(left: 3, right: 5), .hearts,
         .system(.charging), .system(.lowBattery), .system(.download(name: "file.zip", count: 1)),
         .system(.sound(muted: true)), .system(.sound(muted: false)), .system(.welcome(finished: 2, waiting: 1)),
     ] + IdleVariant.allCases.map { Act.idle($0) }

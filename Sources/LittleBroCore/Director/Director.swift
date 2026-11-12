@@ -48,6 +48,8 @@ public enum Act: Equatable, Sendable {
     case game(left: Int, right: Int)
     /// The tiny strip shown while Claude sessions are working. Stays out until replaced.
     case working(count: Int)
+    /// The eyes turn into beating hearts.
+    case hearts
     /// Something happened on the Mac (charger, download, mute, a device…).
     case system(SystemEvent)
 
@@ -55,7 +57,7 @@ public enum Act: Equatable, Sendable {
         switch self {
         case .card(let c, _): return c.kind == .needsInput ? 3 : 2
         case .system: return 2
-        case .peek, .vibe, .hacker, .game: return 1
+        case .peek, .vibe, .hacker, .game, .hearts: return 1
         case .idle: return 0
         case .working: return -1
         }
@@ -157,6 +159,8 @@ public final class Director {
         for o in overlays { o.presence.target = 0 }
         rhythmAmount.target = 0
         character.paddleMix.target = 0
+        character.heartMix.target = 0
+        character.heartMerge.target = 0
         character.setEyeColor(.white)
         switch newAct {
         case .card(let card, let intro): buildCard(card, intro: intro)
@@ -166,6 +170,7 @@ public final class Director {
         case .hacker(let style): buildHacker(style)
         case .game(let l, let r): buildGame(left: l, right: r)
         case .working(let n): buildWorking(count: n)
+        case .hearts: buildHearts()
         case .system(let e): buildSystem(e)
         }
         timeline.start()
@@ -215,6 +220,8 @@ public final class Director {
         for o in overlays { o.presence.target = 0 }
         rhythmAmount.target = 0
         character.paddleMix.target = 0
+        character.heartMix.target = 0
+        character.heartMerge.target = 0
         timeline.at(0) { d in
             d.character.setEyeColor(.white)
             d.character.textFading = true

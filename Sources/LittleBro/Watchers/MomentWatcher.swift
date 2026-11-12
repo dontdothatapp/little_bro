@@ -50,7 +50,7 @@ final class MomentWatcher {
     private func pollFrontTab() {
         guard !polling, let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
               Self.browsers.contains(front) else { return }
-        guard isWanted?(.music) == true || isWanted?(.gaming) == true else { return }
+        guard MomentCatalog.webMoments.contains(where: { isWanted?($0) == true }) else { return }
         polling = true
         let script = VideoWatcher.safari.contains(front)
             ? "tell application id \"\(front)\" to get URL of current tab of front window"

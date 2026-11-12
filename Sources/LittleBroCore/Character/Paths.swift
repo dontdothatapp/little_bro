@@ -99,4 +99,124 @@ public enum Paths {
         var t = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: rotation)
         return shape.copy(using: &t) ?? shape
     }
+    // MARK: - Eye ↔ heart morph
+
+    /// Points around a rounded rectangle, evenly spaced by arc length, starting at the top
+    /// centre and going clockwise on screen (y down).
+    static func roundedRectOutline(width w: Double, height h: Double, radius rIn: Double, count n: Int) -> [CGPoint] {
+        let r = max(0, min(rIn, min(w, h) / 2))
+        let hw = w / 2, hh = h / 2
+        let straightX = w - 2 * r, straightY = h - 2 * r
+        let arc = Double.pi / 2 * r
+        let perimeter = 2 * straightX + 2 * straightY + 4 * arc
+        guard perimeter > 0 else { return Array(repeating: .zero, count: n) }
+        func point(at sIn: Double) -> CGPoint {
+            var s = sIn.truncatingRemainder(dividingBy: perimeter)
+            // Top edge, right half.
+            if s < straightX / 2 { return CGPoint(x: s, y: -hh) }
+            s -= straightX / 2
+            // Top-right corner.
+            if s < arc { let a = -Double.pi / 2 + s / max(r, 1e-9); return CGPoint(x: hw - r + r * cos(a), y: -hh + r + r * sin(a)) }
+            s -= arc
+            if s < straightY { return CGPoint(x: hw, y: -hh + r + s) }
+            s -= straightY
+            if s < arc { let a = s / max(r, 1e-9); return CGPoint(x: hw - r + r * cos(a), y: hh - r + r * sin(a)) }
+            s -= arc
+            if s < straightX { return CGPoint(x: hw - r - s, y: hh) }
+            s -= straightX
+            if s < arc { let a = Double.pi / 2 + s / max(r, 1e-9); return CGPoint(x: -hw + r + r * cos(a), y: hh - r + r * sin(a)) }
+            s -= arc
+            if s < straightY { return CGPoint(x: -hw, y: hh - r - s) }
+            s -= straightY
+            if s < arc { let a = Double.pi + s / max(r, 1e-9); return CGPoint(x: -hw + r + r * cos(a), y: -hh + r + r * sin(a)) }
+            s -= arc
+            return CGPoint(x: -hw + r + s, y: -hh)
+        }
+        return (0..<n).map { point(at: Double($0) / Double(n) * perimeter) }
+    }
+
+    /// Points around a heart of the given width, evenly spaced by arc length, starting at the
+    /// dip between the lobes and going clockwise on screen (y down). Centred on its bounds.
+    static func heartOutline(width: Double, count n: Int) -> [CGPoint] {
+        let unit = unitHeart(count: n)
+        return unit.map { CGPoint(x: $0.x * width, y: $0.y * width) }
+    }
+
+    private static let heartCacheLock = NSLock()
+    nonisolated(unsafe) private static var heartCache: [Int: [CGPoint]] = [:]
+
+    /// The heart outline for width 1, computed once per point count.
+    static func unitHeart(count n: Int) -> [CGPoint] {
+        heartCacheLock.lock(); defer { heartCacheLock.unlock() }
+        if let c = heartCache[n] { return c }
+        let c = computeHeartOutline(width: 1, count: n)
+        heartCache[n] = c
+        return c
+    }
+
+    private static func computeHeartOutline(width: Double, count n: Int) -> [CGPoint] {
+        // The classic parametric heart, flipped for y-down; t = 0 is the dip.
+        let dense = 720
+        var pts: [CGPoint] = []
+        pts.reserveCapacity(dense)
+        for i in 0..<dense {
+            let t = Double(i) / Double(dense) * 2 * .pi
+            let x = 16 * pow(sin(t), 3)
+            let y = -(13 * cos(t) - 5 * cos(2 * t) - 2 * cos(3 * t) - cos(4 * t))
+            pts.append(CGPoint(x: x, y: y))
+        }
+        let minY = pts.map(\.y).min() ?? 0, maxY = pts.map(\.y).max() ?? 0
+        let scale = width / 32
+        let midY = (minY + maxY) / 2
+        pts = pts.map { CGPoint(x: $0.x * scale, y: ($0.y - midY) * scale) }
+        // Resample by arc length so it lines up with the rectangle's points.
+        var cumulative = [0.0]
+        for i in 1...pts.count {
+            let a = pts[i - 1], b = pts[i % pts.count]
+            cumulative.append(cumulative[i - 1] + Double(hypot(b.x - a.x, b.y - a.y)))
+        }
+        let total = cumulative.last ?? 1
+        var out: [CGPoint] = []
+        var j = 0
+        for k in 0..<n {
+            let target = Double(k) / Double(n) * total
+            while j < pts.count - 1 && cumulative[j + 1] < target { j += 1 }
+            let span = cumulative[j + 1] - cumulative[j]
+            let u = span > 0 ? (target - cumulative[j]) / span : 0
+            let a = pts[j], b = pts[(j + 1) % pts.count]
+            out.append(CGPoint(x: Double(a.x) + (Double(b.x) - Double(a.x)) * u, y: Double(a.y) + (Double(b.y) - Double(a.y)) * u))
+        }
+        return out
+    }
+
+    /// An eye part-way to being a heart (`mix` 0 = eye, 1 = heart).
+    public static func eyeHeart(center: CGPoint, width ew: Double, height eh: Double, roundness: Double,
+                                heartWidth: Double, mix: Double, rotation: Double) -> CGPath {
+        let n = 96
+        let rect = roundedRectOutline(width: max(ew, 0.5), height: max(eh, 0.5),
+                                      radius: min(ew, eh) * clamp(roundness, 0, 0.5), count: n)
+        let heart = heartOutline(width: heartWidth, count: n)
+        let m = clamp(mix, 0, 1.2)
+        let path = CGMutablePath()
+        for i in 0..<n {
+            let p = CGPoint(x: Double(rect[i].x) + (Double(heart[i].x) - Double(rect[i].x)) * m,
+                            y: Double(rect[i].y) + (Double(heart[i].y) - Double(rect[i].y)) * m)
+            if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        var t = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: rotation)
+        return path.copy(using: &t) ?? path
+    }
+
+    /// A small heart (for floating decorations).
+    public static func heart(center: CGPoint, width: Double) -> CGPath {
+        let pts = heartOutline(width: width, count: 48)
+        let path = CGMutablePath()
+        for (i, p) in pts.enumerated() {
+            let q = CGPoint(x: p.x + center.x, y: p.y + center.y)
+            if i == 0 { path.move(to: q) } else { path.addLine(to: q) }
+        }
+        path.closeSubpath()
+        return path
+    }
 }

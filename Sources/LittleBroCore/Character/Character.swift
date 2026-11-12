@@ -169,6 +169,11 @@ public final class Character {
     var eyeG = Spring(1, .glow)
     var eyeB = Spring(1, .glow)
 
+    /// Heart mode: 0 = eyes, 1 = hearts.
+    var heartMix = Spring(0, SpringParams(response: 0.34, damping: 0.58))
+    /// 0 = two hearts, 1 = they've slid together into one shared heart.
+    var heartMerge = Spring(0, SpringParams(response: 0.55, damping: 0.74))
+
     /// Paddle mode: the eyes become two paddles at ±`paddleHalfSpan`, at heights `paddleY`.
     var paddleMix = Spring(0, SpringParams(response: 0.38, damping: 0.82))
     public var paddleY: (left: Double, right: Double) = (20, 20)
@@ -230,6 +235,8 @@ public final class Character {
         eyeG.snap(to: 1)
         eyeB.snap(to: 1)
         paddleMix.snap(to: 0)
+        heartMix.snap(to: 0)
+        heartMerge.snap(to: 0)
         rhythm = Rhythm()
         spacing.snap(to: 1)
         lookY.snap(to: 0.15)
@@ -385,6 +392,8 @@ public final class Character {
         eyeG.step(dt)
         eyeB.step(dt)
         paddleMix.step(dt)
+        heartMix.step(dt)
+        heartMerge.step(dt)
         sway.step(dt)
         breathe.step(dt)
         stretch.target = min(abs(blobH.velocity) * 0.028, 9)
@@ -484,7 +493,8 @@ public final class Character {
             // Perspective (the eye on the near side grows) — but not with slanted lids,
             // where it makes one eye look raised and skeptical.
             let slant = clamp(abs(eye.lidAngle) / 0.2, 0, 1)
-            let perspective = 1 + 0.07 * lx * side * (1 - slant)
+            let merge = clamp(heartMerge.value, 0, 1.1) * clamp(heartMix.value, 0, 1)
+            let perspective = 1 + 0.07 * lx * side * (1 - slant) * (1 - clamp(merge, 0, 1))
             let squint = 1 + 0.12 * (1 - min(openness, 1))
             let ew = Metrics.eyeWidth * scale * eye.width * perspective * squint * lerp(1, 0.42, pm)
             let eh = max(Metrics.minEyeLine,
@@ -496,9 +506,22 @@ public final class Character {
                 cx = lerp(cx, faceCX + side * paddleHalfSpan, pm)
                 cy = lerp(cy, side < 0 ? paddleY.left : paddleY.right, pm)
             }
-            s.eyes.append(Paths.eye(center: CGPoint(x: cx, y: cy), width: ew, height: eh,
-                                    roundness: eye.roundness, lidTop: eye.lidTop, lidAngle: eye.lidAngle,
-                                    side: side, happy: eye.happy, rotation: rot))
+            let hm = heartMix.value
+            if hm > 0.002 {
+                // Two hearts slide to the middle and overlap exactly: one shared heart.
+                if merge > 0.0001 {
+                    cx = lerp(cx, faceCX + offX * (1 - pm), merge)
+                    cy = lerp(cy, faceCY + offY * (1 - pm), merge)
+                }
+                let heartW = Metrics.eyeWidth * scale * perspective * lerp(1.5, 2.2, clamp(merge, 0, 1.1))
+                s.eyes.append(Paths.eyeHeart(center: CGPoint(x: cx, y: cy), width: ew, height: eh,
+                                             roundness: eye.roundness, heartWidth: heartW,
+                                             mix: hm, rotation: rot * (1 - clamp(merge, 0, 1))))
+            } else {
+                s.eyes.append(Paths.eye(center: CGPoint(x: cx, y: cy), width: ew, height: eh,
+                                        roundness: eye.roundness, lidTop: eye.lidTop, lidAngle: eye.lidAngle,
+                                        side: side, happy: eye.happy, rotation: rot))
+            }
             // An eye mostly beyond the body's edge fades instead of leaving a clipped dot.
             let visible = max(0, min(cx + ew / 2, inner) - max(cx - ew / 2, -inner)) / max(ew, 0.1)
             let u = clamp((visible - 0.45) / 0.4, 0, 1)

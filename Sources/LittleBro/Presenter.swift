@@ -135,6 +135,7 @@ final class Presenter {
         case .hacker(let style): return "hacker \(style.rawValue)"
         case .game(let l, let r): return "game \(l):\(r)"
         case .working(let n): return "working \(n)"
+        case .hearts: return "hearts"
         case .system(let e): return "system \(e)"
         }
     }
@@ -349,6 +350,8 @@ final class Presenter {
             rallyCounts = true
             let s = settings.paddleScore
             present(.game(left: s.left, right: s.right))
+        case .love:
+            present(.hearts)
         }
         onStateChange?()
     }

@@ -42,6 +42,8 @@ What it does today:
   - **Games** (Steam, GOG, Epic, itch, Battle.net…, store sites like SteamDB, and games
     themselves): the eyes become paddles and play one real point of paddle ball. The
     all-time score is kept, so you can root for a side.
+  - **logue.is** (a friend's platform): the eyes turn into two hearts, which slide together
+    into one shared heart that beats, with tiny hearts drifting up.
 
 ## Run it
 
@@ -70,7 +72,7 @@ pages don't trigger moments.
 
 ```bash
 open "littlebro://play/done"        # also: done-reminder, needs, needs-reminder, peek, vibe,
-                                    # hacker-shades, hacker-rain, game, working, welcome,
+                                    # hacker-shades, hacker-rain, game, hearts, working, welcome,
                                     # charging, low-battery, download, mute, unmute, airpods,
                                     # overear, controller, mouse, keyboard, device,
                                     # idle-lookAround, idle-sleepy, idle-hello, idle-curious, idle-shy

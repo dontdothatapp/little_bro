@@ -79,6 +79,21 @@ import Testing
         }
     }
 
+    @Test(arguments: [0.0, 0.3, 0.7, 1.0])
+    func eyeMorphsIntoHeart(mix: Double) {
+        let p = Paths.eyeHeart(center: CGPoint(x: 5, y: 20), width: 15, height: 21.5, roundness: 0.45,
+                               heartWidth: 22, mix: mix, rotation: 0)
+        let b = p.boundingBoxOfPath
+        #expect(!p.isEmpty)
+        #expect(abs(b.midX - 5) < 0.6)
+        #expect(abs(b.width - (15 + (22 - 15) * mix)) < 1.2)
+        // At mix 0 it's the eye; at 1 the heart's dip sits below the top of its lobes.
+        if mix == 1 {
+            #expect(!p.contains(CGPoint(x: 5, y: b.minY + 1.5)))
+            #expect(p.contains(CGPoint(x: 5 - 5.5, y: b.minY + 3)))
+        }
+    }
+
     @Test func worriedLidsMirror() {
         let s = Expression.worried.left
         let l = Paths.eye(center: .zero, width: 13, height: 19, roundness: s.roundness, lidTop: s.lidTop,

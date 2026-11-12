@@ -8,12 +8,15 @@ public enum Moment: String, CaseIterable, Codable, Sendable {
     case hacker
     /// Game stores, launchers and games: paddles.
     case gaming
+    /// A friend's site: the eyes turn into hearts.
+    case love
 
     public var title: String {
         switch self {
         case .music: "Spotify"
         case .hacker: "Hackerman (terminals & IDEs)"
         case .gaming: "Gaming"
+        case .love: "Hearts for logue.is"
         }
     }
 }
@@ -64,7 +67,11 @@ public enum MomentCatalog {
         ("itch.io", .gaming), ("xbox.com/play", .gaming), ("xbox.com/en-us/play", .gaming),
         ("humblebundle.com", .gaming), ("store.playstation.com", .gaming), ("nintendo.com/store", .gaming),
         ("isthereanydeal.com", .gaming), ("protondb.com", .gaming),
+        ("logue.is", .love),
     ]
+
+    /// Moments that can come from a browser tab.
+    public static var webMoments: Set<Moment> { Set(sites.map(\.1)) }
 
     public static func moment(bundleId: String?, bundlePath: String? = nil, category: String? = nil) -> Moment? {
         if let id = bundleId {

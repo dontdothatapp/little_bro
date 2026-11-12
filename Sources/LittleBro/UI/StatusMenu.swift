@@ -74,7 +74,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         sub.addItem(.separator())
         for (title, key) in [("Spotify: vibing", "vibe"), ("Hackerman: shades", "hacker-shades"),
-                             ("Hackerman: code rain", "hacker-rain"), ("Gaming: paddle ball", "game")] {
+                             ("Hackerman: code rain", "hacker-rain"), ("Gaming: paddle ball", "game"),
+                             ("Hearts for logue.is", "hearts")] {
             sub.addItem(previewItem(title, key))
         }
         sub.addItem(.separator())
@@ -254,6 +255,7 @@ enum Previews {
         case "hacker-rain": return .hacker(.rain)
         case "game": return .game(left: 0, right: 0)
         case "working": return .working(count: 2)
+        case "hearts": return .hearts
         case "welcome": return .system(.welcome(finished: 2, waiting: 1))
         case "charging": return .system(.charging)
         case "low-battery": return .system(.lowBattery)

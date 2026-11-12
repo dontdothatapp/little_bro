@@ -141,6 +141,11 @@ import Testing
         #expect(MomentCatalog.moment(url: "https://www.xbox.com/en-US/games") == nil)
         #expect(MomentCatalog.moment(url: "https://github.com/x") == nil)
         #expect(MomentCatalog.moment(url: "not a url") == nil)
+        #expect(MomentCatalog.moment(url: "https://logue.is/") == .love)
+        #expect(MomentCatalog.moment(url: "https://www.logue.is/some/page?x=1") == .love)
+        #expect(MomentCatalog.moment(url: "https://app.logue.is/") == .love)
+        #expect(MomentCatalog.moment(url: "https://catalogue.is/") == nil)
+        #expect(MomentCatalog.webMoments.contains(.love))
     }
 
     @Test func gate() {
