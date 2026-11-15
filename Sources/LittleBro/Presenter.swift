@@ -168,6 +168,7 @@ final class Presenter {
         if claude.refreshSeen(now: now, claudeFrontmost: ClaudeBridge.claudeIsFrontmost, userActive: activity.inputIdle < 20) {
             onStateChange?()
         }
+        if claude.releaseHeld(now: now) { onStateChange?() }
 
         // The card on screen belongs to a session that no longer needs anything: tuck away.
         if let sid = cardSession, sid != Self.setupSession, claude.tracker.items[sid] == nil,
@@ -287,7 +288,9 @@ final class Presenter {
 
     /// The "Claude is working" strip: Little Bro's resting state while any session works.
     private func updateWorkingStrip(_ now: Date) {
+        // Sessions waiting on their own background tasks are still working too.
         let sessions = claude.tracker.workingSessions(now: now)
+            + claude.tracker.heldSessions.filter { !claude.tracker.workingSessions(now: now).contains($0) }
         // Helper sessions count towards their parent: one per top-level session.
         var roots: [String] = []
         for sid in sessions {

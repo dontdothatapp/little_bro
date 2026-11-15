@@ -8,16 +8,19 @@ public struct HookEvent: Equatable, Sendable {
     public var toolName: String?
     public var notificationType: String?
     public var message: String?
+    public var transcriptPath: String?
     public var receivedAt: Date
 
     public init(sessionId: String, name: String, cwd: String? = nil, toolName: String? = nil,
-                notificationType: String? = nil, message: String? = nil, receivedAt: Date = Date()) {
+                notificationType: String? = nil, message: String? = nil, transcriptPath: String? = nil,
+                receivedAt: Date = Date()) {
         self.sessionId = sessionId
         self.name = name
         self.cwd = cwd
         self.toolName = toolName
         self.notificationType = notificationType
         self.message = message
+        self.transcriptPath = transcriptPath
         self.receivedAt = receivedAt
     }
 
@@ -28,6 +31,7 @@ public struct HookEvent: Equatable, Sendable {
         return HookEvent(sessionId: sid, name: name, cwd: obj["cwd"] as? String,
                          toolName: obj["tool_name"] as? String,
                          notificationType: obj["notification_type"] as? String,
-                         message: obj["message"] as? String, receivedAt: receivedAt)
+                         message: obj["message"] as? String, transcriptPath: obj["transcript_path"] as? String,
+                         receivedAt: receivedAt)
     }
 }

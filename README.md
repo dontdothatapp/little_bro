@@ -11,6 +11,9 @@ What it does today:
   "needs you" animation and the session's title, for about 10 seconds. Click it to jump
   straight into that session. Hover to read Claude's recap. While a session stays
   unseen it comes back every minute (not while you're away from the computer).
+  "Finished" means really finished: if a turn ends while background tasks (commands or
+  agents running in the background) or helper sessions are still going, Little Bro waits
+  until they're done — the working strip stays up meanwhile.
   Only top-level sessions notify: sessions spawned by another session report to their
   parent, so only the parent's "finished" shows (and if the parent finishes again right
   after, woken by a helper, it joins the reminders instead of replaying the animation).

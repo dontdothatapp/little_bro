@@ -68,6 +68,10 @@ public final class AttentionTracker {
     public private(set) var working: [String: Date] = [:]
     /// When we last showed each session's "Finished" card.
     public private(set) var lastFinishShown: [String: Date] = [:]
+    /// Sessions whose turn ended while background work (tasks, helper sessions) was still
+    /// running: their "Finished" waits until that work is really done.
+    public private(set) var held: [String: HookEvent] = [:]
+    private var quietSince: [String: Date] = [:]
 
     public init() {}
 
@@ -77,14 +81,56 @@ public final class AttentionTracker {
         case cleared(String)
     }
 
-    /// - Parameter raiseAttention: false for sessions spawned by another session: they still
-    ///   count as working, but never notify — their parent will.
+    /// - Parameters:
+    ///   - raiseAttention: false for sessions spawned by another session: they still count as
+    ///     working, but never notify — their parent will.
+    ///   - busy: for a `Stop`, whether background work is still running. Then "Finished" is held.
     @discardableResult
-    public func handle(_ e: HookEvent, raiseAttention: Bool = true) -> Change {
+    public func handle(_ e: HookEvent, raiseAttention: Bool = true, busy: Bool = false) -> Change {
         trackWork(e)
         guard raiseAttention else { return .none }
+        if e.name == "Stop" {
+            if busy {
+                held[e.sessionId] = e
+                quietSince.removeValue(forKey: e.sessionId)
+                return .none
+            }
+            held.removeValue(forKey: e.sessionId)
+        }
         return handleAttention(e)
     }
+
+    /// Lets held "Finished"s through once their background work is done and the session has
+    /// stayed quiet for `grace` seconds (it usually wakes up to handle the results and then
+    /// finishes properly, which is when it should notify). Never holds longer than `maxHold`.
+    public func releaseHeld(now: Date, isBusy: (String) -> Bool, grace: TimeInterval = 30,
+                            maxHold: TimeInterval = 3600) -> [Change] {
+        var changes: [Change] = []
+        for (sid, stop) in held {
+            let expired = now.timeIntervalSince(stop.receivedAt) > maxHold
+            if !expired && isBusy(sid) {
+                quietSince.removeValue(forKey: sid)
+                continue
+            }
+            if !expired {
+                guard let since = quietSince[sid] else {
+                    quietSince[sid] = now
+                    continue
+                }
+                guard now.timeIntervalSince(since) >= grace else { continue }
+            }
+            held.removeValue(forKey: sid)
+            quietSince.removeValue(forKey: sid)
+            var e = stop
+            e.receivedAt = now
+            let c = handleAttention(e)
+            if c != .none { changes.append(c) }
+        }
+        return changes
+    }
+
+    /// Sessions waiting on background work after their turn ended.
+    public var heldSessions: [String] { Array(held.keys) }
 
     /// A session that finishes again shortly after we showed it finishing — typically because
     /// its helper sessions reported back and woke it up — doesn't replay the full intro if the
@@ -104,6 +150,11 @@ public final class AttentionTracker {
 
     private func trackWork(_ e: HookEvent) {
         let sid = e.sessionId
+        // Any new activity means the session picked its work back up: the next Stop decides.
+        if ["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"].contains(e.name) {
+            held.removeValue(forKey: sid)
+            quietSince.removeValue(forKey: sid)
+        }
         switch e.name {
         case "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "SubagentStart", "PreCompact",
              "ElicitationResult":
@@ -169,7 +220,10 @@ public final class AttentionTracker {
             return .none
         case "ElicitationResult", "PermissionDenied":
             return clearIfWaiting(sid)
-        case "UserPromptSubmit", "SessionEnd":
+        case "UserPromptSubmit":
+            return clear(sid)
+        case "SessionEnd":
+            held.removeValue(forKey: sid)
             return clear(sid)
         default:
             return .none

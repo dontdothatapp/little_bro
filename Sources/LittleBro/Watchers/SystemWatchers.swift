@@ -64,11 +64,14 @@ final class PowerWatcher {
 // MARK: - Downloads
 
 /// Notices new finished files in ~/Downloads (partial browser downloads are ignored).
-/// macOS asks once for access to the Downloads folder.
+/// macOS asks for access to the Downloads folder — and *waits* for the answer, so everything
+/// here runs on its own queue: a pending permission prompt never freezes Little Bro.
 final class DownloadsWatcher {
+    /// Called on the main thread.
     var onDownloaded: (([URL]) -> Void)?
 
     private let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+    private let queue = DispatchQueue(label: "littlebro.downloads", qos: .utility)
     private var known = Set<String>()
     private var source: DispatchSourceFileSystemObject?
     private var fd: Int32 = -1
@@ -76,6 +79,10 @@ final class DownloadsWatcher {
     static let partialSuffixes = [".crdownload", ".download", ".part", ".partial", ".tmp", ".opdownload", ".icloud"]
 
     func start() {
+        queue.async { [self] in setUp() }
+    }
+
+    private func setUp() {
         known = Set(listing())
         fd = Darwin.open(folder.path, O_EVTONLY)
         guard fd >= 0 else {
@@ -83,7 +90,7 @@ final class DownloadsWatcher {
             return
         }
         let s = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .link],
-                                                          queue: .main)
+                                                          queue: queue)
         s.setEventHandler { [weak self] in self?.scheduleScan() }
         s.setCancelHandler { [weak self] in if let fd = self?.fd, fd >= 0 { Darwin.close(fd) } }
         s.resume()
@@ -99,7 +106,7 @@ final class DownloadsWatcher {
         // Wait for things to settle (browsers rename the finished file at the very end).
         let item = DispatchWorkItem { [weak self] in self?.scan() }
         pending = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: item)
+        queue.asyncAfter(deadline: .now() + 1.2, execute: item)
     }
 
     private func scan() {
@@ -116,7 +123,8 @@ final class DownloadsWatcher {
         }
         guard !fresh.isEmpty else { return }
         Log.info("downloads: \(fresh.count) new")
-        onDownloaded?(fresh.sorted().map { folder.appendingPathComponent($0) })
+        let urls = fresh.sorted().map { folder.appendingPathComponent($0) }
+        DispatchQueue.main.async { [weak self] in self?.onDownloaded?(urls) }
     }
 }
 

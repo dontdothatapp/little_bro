@@ -5,6 +5,7 @@ import LittleBroCore
 /// "has the user seen it?" and opening a session.
 final class ClaudeBridge {
     let tracker = AttentionTracker()
+    let transcripts = TranscriptTasks()
     let sessions = DesktopSessionIndex(root: AppPaths.desktopSessions)
     var onChange: (() -> Void)?
 
@@ -56,7 +57,11 @@ final class ClaudeBridge {
             if startup && Date().timeIntervalSince(e.receivedAt) > 10 * 60 { continue }
             // Sessions spawned by another session report to their parent; only the parent notifies.
             let child = sessions.session(forCliId: e.sessionId)?.isChild ?? false
-            let change = tracker.handle(e, raiseAttention: !child)
+            transcripts.note(session: e.sessionId, transcript: e.transcriptPath)
+            // A turn can end while background tasks or helper sessions are still working:
+            // that isn't "finished" yet.
+            let busy = e.name == "Stop" && !child && isBusy(e.sessionId, logging: true)
+            let change = tracker.handle(e, raiseAttention: !child, busy: busy)
             if child && ["Stop", "StopFailure", "PermissionRequest"].contains(e.name) {
                 Log.info("hook \(e.name) from helper session \(e.sessionId.prefix(8)) → ignored (its parent will notify)")
             }
@@ -115,6 +120,32 @@ final class ClaudeBridge {
             NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
         }
         tracker.clear(item.sessionId)
+    }
+
+    /// Background tasks still running in this session, or helper sessions it spawned still working.
+    func isBusy(_ sid: String, logging: Bool = false) -> Bool {
+        let tasks = transcripts.running(sid)
+        if !tasks.isEmpty {
+            if logging { Log.info("hold finish of \(sid.prefix(8)): \(tasks.count) background task(s) running") }
+            return true
+        }
+        guard let me = sessions.session(forCliId: sid) else { return false }
+        for other in tracker.workingSessions(now: Date()) where other != sid {
+            if let root = sessions.root(of: sessions.session(forCliId: other)), root.localId == me.localId {
+                if logging { Log.info("hold finish of \(sid.prefix(8)): a helper session is still working") }
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Lets held finishes through once their background work is really done.
+    @discardableResult
+    func releaseHeld(now: Date) -> Bool {
+        guard !tracker.held.isEmpty else { return false }
+        let changes = tracker.releaseHeld(now: now, isBusy: { [weak self] in self?.isBusy($0) ?? false })
+        for c in changes { Log.info("released held finish → \(c)") }
+        return !changes.isEmpty
     }
 
     /// Whether the user opened this session in Claude after `date`.
