@@ -7,6 +7,8 @@ DEST="$HOME/Applications/Little Bro.app"
 mkdir -p "$HOME/Applications"
 pkill -x LittleBro 2>/dev/null && sleep 0.5 || true
 rm -rf "$DEST"
-cp -R "build/Little Bro.app" "$DEST"
+# Install the clean, signed copy without carrying over any extended attributes.
+ditto --noextattr --noqtn "$(cat build/.staged-app)" "$DEST"
+codesign --verify --strict "$DEST"
 open "$DEST"
 echo "Installed and launched $DEST"

@@ -101,12 +101,19 @@ app uses and writes PNG frames, a contact sheet and an MP4 (needs `ffmpeg`). Opt
 `--then needs@2` (interrupt with another act), `--backdrop light|dark|video`, `--fps 120`.
 Rendered previews of every animation are in [`previews/`](previews/).
 
-By default the app is signed ad-hoc. To keep macOS permissions across rebuilds, sign with
-your own identity (macOS asks once for keychain access):
+By default the app is signed ad-hoc, so macOS treats every rebuild as a new app and asks
+for permissions again. To keep them, sign with your own identity (macOS asks once for
+keychain access — choose "Always Allow"):
 
 ```bash
 LITTLEBRO_SIGN_IDENTITY="Apple Development" ./scripts/install.sh
 ```
+
+If that name matches several certificates, the script lists them with their team and
+stops; pass the one you want by its SHA-1 fingerprint instead
+(`LITTLEBRO_SIGN_IDENTITY=<fingerprint> ./scripts/install.sh`). The app is assembled and
+signed in a temporary folder, because synced folders (iCloud Desktop & Documents) add
+file metadata that breaks code signatures.
 
 ## How it's built
 
