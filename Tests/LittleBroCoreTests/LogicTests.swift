@@ -208,3 +208,74 @@ import Testing
         #expect(DesktopSession.parse(Data(#"{"sessionId":"nope"}"#.utf8)) == nil)
     }
 }
+
+@Suite struct HelperSessionTests {
+    let t0 = Date(timeIntervalSince1970: 3_000_000)
+    func ev(_ name: String, _ dt: Double, sid: String, tool: String? = nil) -> HookEvent {
+        HookEvent(sessionId: sid, name: name, toolName: tool, receivedAt: t0.addingTimeInterval(dt))
+    }
+
+    @Test func spawnedSessionsWorkButNeverNotify() {
+        let a = AttentionTracker()
+        a.handle(ev("UserPromptSubmit", 0, sid: "child"), raiseAttention: false)
+        #expect(a.workingSessions(now: t0.addingTimeInterval(1)) == ["child"])
+        a.handle(ev("PermissionRequest", 5, sid: "child", tool: "Bash"), raiseAttention: false)
+        a.handle(ev("Stop", 10, sid: "child"), raiseAttention: false)
+        #expect(a.items.isEmpty)
+        #expect(a.workingSessions(now: t0.addingTimeInterval(11)).isEmpty)
+    }
+
+    /// The real pattern from the log: the parent finishes, a helper reports back, the parent
+    /// wakes and finishes again a minute later.
+    @Test func parentFinishingAgainSoonJoinsTheReminders() {
+        let a = AttentionTracker()
+        a.handle(ev("Stop", 0, sid: "main"))
+        a.markShown("main", at: t0.addingTimeInterval(1.5))     // intro shown
+        a.markShown("main", at: t0.addingTimeInterval(11.5))    // …and tucked away
+        a.handle(ev("UserPromptSubmit", 50, sid: "main"))       // woken by a helper's report
+        a.handle(ev("Stop", 61, sid: "main"))
+        let now = t0.addingTimeInterval(62.5)
+        #expect(a.foldRepeatedFinish("main", now: now, userLookedSince: { _ in false }))
+        // Not shown again right away (no replayed intro)…
+        #expect(a.due(now: now, settle: 1.2, interval: 60) == nil)
+        // …but as a regular reminder a minute after the last showing.
+        #expect(a.due(now: t0.addingTimeInterval(72), settle: 1.2, interval: 60)?.sessionId == "main")
+        #expect(a.items["main"]?.showCount == 1)
+    }
+
+    @Test func aFreshIntroIfYouLookedOrItWasLongAgo() {
+        let a = AttentionTracker()
+        a.handle(ev("Stop", 0, sid: "main"))
+        a.markShown("main", at: t0.addingTimeInterval(2))
+        a.handle(ev("UserPromptSubmit", 30, sid: "main"))
+        a.handle(ev("Stop", 60, sid: "main"))
+        #expect(!a.foldRepeatedFinish("main", now: t0.addingTimeInterval(61), userLookedSince: { _ in true }))
+        #expect(a.items["main"]?.lastShownAt == nil)
+
+        let b = AttentionTracker()
+        b.handle(ev("Stop", 0, sid: "main"))
+        b.markShown("main", at: t0.addingTimeInterval(2))
+        b.handle(ev("UserPromptSubmit", 30, sid: "main"))
+        b.handle(ev("Stop", 600, sid: "main"))
+        #expect(!b.foldRepeatedFinish("main", now: t0.addingTimeInterval(601), userLookedSince: { _ in false }))
+    }
+
+    @Test func needsInputIsNeverFolded() {
+        let a = AttentionTracker()
+        a.handle(ev("Stop", 0, sid: "main"))
+        a.markShown("main", at: t0.addingTimeInterval(2))
+        a.handle(ev("PermissionRequest", 20, sid: "main", tool: "Bash"))
+        #expect(!a.foldRepeatedFinish("main", now: t0.addingTimeInterval(22), userLookedSince: { _ in false }))
+    }
+
+    @Test func desktopSessionKnowsItsParent() {
+        let json = """
+        {"sessionId":"local_child","cliSessionId":"c9","title":"Card 35",
+         "spawnedFrom":{"sessionId":"local_parent","turn":3}}
+        """
+        let s = DesktopSession.parse(Data(json.utf8))
+        #expect(s?.parentLocalId == "local_parent")
+        #expect(s?.isChild == true)
+        #expect(DesktopSession.parse(Data(#"{"sessionId":"local_x"}"#.utf8))?.isChild == false)
+    }
+}

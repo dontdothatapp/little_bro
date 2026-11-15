@@ -23,6 +23,8 @@ final class Presenter {
     private var clickAction: (() -> Void)?
     private var awaySince: Date?
     private var lastCharging = Date.distantPast
+    /// The top-level session the working strip opens on click.
+    private var workingRootLocalId: String?
     private var workingSession: String?
     private var pendingMoment: (moment: Moment, source: MomentWatcher.Source?, deadline: Date)?
     /// Previews don't count towards the real paddle score.
@@ -189,6 +191,15 @@ final class Presenter {
             return
         }
 
+        // A session that finishes again right after we showed it (helpers reporting back) joins
+        // the reminder rhythm instead of replaying the intro.
+        for item in claude.tracker.pending where item.lastShownAt == nil && !item.kind.isNeedsInput {
+            if claude.tracker.foldRepeatedFinish(item.sessionId, now: now,
+                                                 userLookedSince: { claude.userLooked(at: item.sessionId, since: $0) }) {
+                Log.info("folded repeat finish of \(item.sessionId.prefix(8)) into reminders")
+            }
+        }
+
         if settings.claudeEnabled, userHere,
            let item = claude.tracker.due(now: now, settle: Self.settle, interval: Self.reminderInterval),
            item.sessionId != cardSession {
@@ -277,11 +288,18 @@ final class Presenter {
     /// The "Claude is working" strip: Little Bro's resting state while any session works.
     private func updateWorkingStrip(_ now: Date) {
         let sessions = claude.tracker.workingSessions(now: now)
+        // Helper sessions count towards their parent: one per top-level session.
+        var roots: [String] = []
+        for sid in sessions {
+            let root = claude.rootSession(forCliId: sid)?.localId ?? sid
+            if !roots.contains(root) { roots.append(root) }
+        }
         let want = settings.claudeEnabled && settings.reactionEnabled(.working) && !settings.isPaused
             && !sessions.isEmpty && !ClaudeBridge.claudeIsFrontmost && activity.screenAvailable
         if want {
-            let n = sessions.count
+            let n = roots.count
             workingSession = sessions.first
+            workingRootLocalId = roots.first.flatMap { $0.hasPrefix("local_") ? $0 : nil }
             director.restingAct = .working(count: n)
             if case .working(let current)? = director.act {
                 if current != n { director.updateWorking(count: n) }
@@ -422,7 +440,9 @@ final class Presenter {
             return
         }
         if act.isWorking {
-            if let sid = workingSession { claude.openSession(cliId: sid) }
+            if let root = workingRootLocalId { claude.openSession(localId: root) } else if let sid = workingSession {
+                claude.openSession(cliId: sid)
+            }
             return
         }
         if cardSession == Self.setupSession {

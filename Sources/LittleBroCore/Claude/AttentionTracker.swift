@@ -66,6 +66,8 @@ public final class AttentionTracker {
     public private(set) var items: [String: AttentionItem] = [:]
     /// Sessions currently working (last activity time), for the "Claude is working" strip.
     public private(set) var working: [String: Date] = [:]
+    /// When we last showed each session's "Finished" card.
+    public private(set) var lastFinishShown: [String: Date] = [:]
 
     public init() {}
 
@@ -75,10 +77,29 @@ public final class AttentionTracker {
         case cleared(String)
     }
 
+    /// - Parameter raiseAttention: false for sessions spawned by another session: they still
+    ///   count as working, but never notify — their parent will.
     @discardableResult
-    public func handle(_ e: HookEvent) -> Change {
+    public func handle(_ e: HookEvent, raiseAttention: Bool = true) -> Change {
         trackWork(e)
+        guard raiseAttention else { return .none }
         return handleAttention(e)
+    }
+
+    /// A session that finishes again shortly after we showed it finishing — typically because
+    /// its helper sessions reported back and woke it up — doesn't replay the full intro if the
+    /// user hasn't looked at it since: it joins the normal reminder rhythm instead.
+    /// Returns true if it folded the item.
+    @discardableResult
+    public func foldRepeatedFinish(_ sid: String, now: Date, window: TimeInterval = 180,
+                                   userLookedSince: (Date) -> Bool) -> Bool {
+        guard var item = items[sid], item.lastShownAt == nil, !item.kind.isNeedsInput,
+              let last = lastFinishShown[sid], now.timeIntervalSince(last) < window, !userLookedSince(last)
+        else { return false }
+        item.lastShownAt = last
+        item.showCount = max(item.showCount, 1)
+        items[sid] = item
+        return true
     }
 
     private func trackWork(_ e: HookEvent) {
@@ -182,6 +203,7 @@ public final class AttentionTracker {
 
     public func markShown(_ sid: String, at date: Date) {
         guard var item = items[sid] else { return }
+        if !item.kind.isNeedsInput { lastFinishShown[sid] = date }
         item.lastShownAt = date
         item.showCount += 1
         items[sid] = item

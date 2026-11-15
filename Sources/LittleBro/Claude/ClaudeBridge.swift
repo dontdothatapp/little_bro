@@ -54,7 +54,12 @@ final class ClaudeBridge {
         var changed = false
         for e in events.sorted(by: { $0.receivedAt < $1.receivedAt }) {
             if startup && Date().timeIntervalSince(e.receivedAt) > 10 * 60 { continue }
-            let change = tracker.handle(e)
+            // Sessions spawned by another session report to their parent; only the parent notifies.
+            let child = sessions.session(forCliId: e.sessionId)?.isChild ?? false
+            let change = tracker.handle(e, raiseAttention: !child)
+            if child && ["Stop", "StopFailure", "PermissionRequest"].contains(e.name) {
+                Log.info("hook \(e.name) from helper session \(e.sessionId.prefix(8)) → ignored (its parent will notify)")
+            }
             if change != .none {
                 changed = true
                 Log.info("hook \(e.name) \(e.toolName ?? "") \(e.sessionId.prefix(8)) → \(change)")
@@ -110,6 +115,26 @@ final class ClaudeBridge {
             NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
         }
         tracker.clear(item.sessionId)
+    }
+
+    /// Whether the user opened this session in Claude after `date`.
+    func userLooked(at cliId: String, since date: Date) -> Bool {
+        guard let s = sessions.session(forCliId: cliId) else { return false }
+        return s.lastFocusedAt > date.timeIntervalSince1970 * 1000 + 300
+    }
+
+    /// The top-level session a session belongs to (itself, unless it was spawned by another).
+    func rootSession(forCliId id: String) -> DesktopSession? {
+        sessions.root(of: sessions.session(forCliId: id))
+    }
+
+    func openSession(localId: String) {
+        var c = URLComponents()
+        c.scheme = "claude"
+        c.host = "code"
+        c.path = "/continue"
+        c.queryItems = [URLQueryItem(name: "session", value: localId)]
+        if let url = c.url { NSWorkspace.shared.open(url) }
     }
 
     /// Opens a session by its Claude Code id (falls back to just activating Claude).
@@ -168,6 +193,21 @@ final class DesktopSessionIndex {
     func session(forCliId id: String) -> DesktopSession? {
         if byCli[id] == nil { refresh() }
         return byCli[id]
+    }
+
+    func session(forLocalId id: String) -> DesktopSession? {
+        byPath.values.first { $0.session.localId == id }?.session
+    }
+
+    /// Follows `parentLocalId` up to the top-level session.
+    func root(of session: DesktopSession?) -> DesktopSession? {
+        var current = session
+        var hops = 0
+        while let parent = current?.parentLocalId, hops < 8, let p = self.session(forLocalId: parent) {
+            current = p
+            hops += 1
+        }
+        return current
     }
 
     var mostRecentlyFocused: DesktopSession? {

@@ -16,9 +16,13 @@ public struct DesktopSession: Equatable, Sendable {
     public var isArchived: Bool
     /// Claude's one-line recap of the last turn, when present.
     public var recap: String?
+    /// Set when this session was spawned by another one (a side session / helper).
+    public var parentLocalId: String?
+
+    public var isChild: Bool { parentLocalId != nil }
 
     public init(localId: String, cliIds: Set<String>, title: String?, cwd: String?, lastFocusedAt: Double,
-                lastTurnEdgeAt: Double, isArchived: Bool, recap: String?) {
+                lastTurnEdgeAt: Double, isArchived: Bool, recap: String?, parentLocalId: String? = nil) {
         self.localId = localId
         self.cliIds = cliIds
         self.title = title
@@ -27,6 +31,7 @@ public struct DesktopSession: Equatable, Sendable {
         self.lastTurnEdgeAt = lastTurnEdgeAt
         self.isArchived = isArchived
         self.recap = recap
+        self.parentLocalId = parentLocalId
     }
 
     public static func parse(_ data: Data) -> DesktopSession? {
@@ -43,7 +48,8 @@ public struct DesktopSession: Equatable, Sendable {
                               lastFocusedAt: (o["lastFocusedAt"] as? NSNumber)?.doubleValue ?? 0,
                               lastTurnEdgeAt: (o["lastTurnEdgeAt"] as? NSNumber)?.doubleValue ?? 0,
                               isArchived: (o["isArchived"] as? Bool) ?? false,
-                              recap: recap?.trimmingCharacters(in: .whitespacesAndNewlines))
+                              recap: recap?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              parentLocalId: (o["spawnedFrom"] as? [String: Any])?["sessionId"] as? String)
     }
 
     /// Deep link that opens this exact session in the desktop app.
